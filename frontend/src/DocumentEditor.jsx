@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Plus } from 'lucide-react';
 import { Header } from './components/Header';
 import { Footer } from './components/Footer';
@@ -13,11 +13,18 @@ const DocumentEditor = () => {
   ]);
   const [docTitle, setDocTitle] = useState("Tài liệu không có tiêu đề");
   const [savingStatus, setSavingStatus] = useState('saved');
-  const [history, setHistory] = useState([blocks]);
+  const cloneBlocks = (b) => b.map(x => ({ ...x }));
+  const [history, setHistory] = useState([cloneBlocks(blocks)]);
+  const isRestoringHistory = useRef(false);
+//const [history, setHistory] = useState([blocks]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [zoom, setZoom] = useState(100);
-  const [fontFamily, setFontFamily] = useState("Arial");
+  const [fontFamily, setFontFamily] = useState("Arial");                                    
   const [fontSize, setFontSize] = useState(11);
+  const historyTimer = React.useRef(null);
+  const historyRef = useRef(history);
+  const indexRef = useRef(currentIndex);
+  const hasPendingHistory = useRef(false);
   const [textFormats, setTextFormats] = useState({
     bold: false,
     italic: false,
@@ -37,27 +44,50 @@ const DocumentEditor = () => {
     return () => clearTimeout(timer);
   }, [docTitle]);
 
-  // Hàm cập nhật blocks có lưu lịch sử
+  useEffect(() => {
+    historyRef.current = history;
+  }, [history]);
+
+  useEffect(() => {
+    indexRef.current = currentIndex;
+  }, [currentIndex]);
+
+/*
+  Hàm cập nhật blocks có lưu lịch sử
   const updateBlocksWithHistory = (newBlocks) => {
     const nextHistory = history.slice(0, currentIndex + 1);
     setHistory([...nextHistory, newBlocks]);
     setCurrentIndex(nextHistory.length);
     setBlocks(newBlocks);
   };
+*/ 
 
   // Hàm Undo
   const handleUndo = () => {
     if (currentIndex > 0) {
+      isRestoringHistory.current = true;
+      const prev = history[currentIndex - 1];
       setCurrentIndex(currentIndex - 1);
-      setBlocks(history[currentIndex - 1]);
+      setBlocks(cloneBlocks(prev));
+
+      setTimeout(() => {
+        isRestoringHistory.current = false;
+      }, 0);
     }
   };
 
   // Hàm Redo
   const handleRedo = () => {
     if (currentIndex < history.length - 1) {
+      isRestoringHistory.current = true;
+      
+      const next = history[currentIndex + 1];
       setCurrentIndex(currentIndex + 1);
-      setBlocks(history[currentIndex + 1]);
+      setBlocks(cloneBlocks(next));
+
+      setTimeout(() => {
+        isRestoringHistory.current = false;
+      }, 0);
     }
   };
 
@@ -65,7 +95,7 @@ const DocumentEditor = () => {
     const newBlocks = blocks.map(b => 
         b.id === id ? { ...b, status: 'editing' } : { ...b, status: b.status === 'editing' ? 'verified' : b.status }
     );
-    updateBlocksWithHistory(newBlocks);
+    setBlocks(newBlocks);
   };
 
   const handleNewDocument = () => {
@@ -80,7 +110,31 @@ const DocumentEditor = () => {
       const newBlocks = blocks.map(b => 
           b.id === id ? { ...b, content: newContent } : b
       );
+
+      if (!hasPendingHistory.current) {
+        const currentHistory = historyRef.current;
+        const currentIdx = indexRef.current;
+
+        const nextHistory = currentHistory.slice(0, currentIdx + 1);
+        setHistory([...nextHistory, cloneBlocks(blocks)]);
+        setCurrentIndex(nextHistory.length);
+
+        hasPendingHistory.current = true;
+      }
+
       setBlocks(newBlocks);
+
+      clearTimeout(historyTimer.current);
+
+      historyTimer.current = setTimeout(() => {
+        const currentHistory = historyRef.current;
+        const currentIdx = indexRef.current;
+
+        const nextHistory = currentHistory.slice(0, currentIdx + 1);
+        setHistory([...nextHistory, cloneBlocks(newBlocks)]);
+        setCurrentIndex(nextHistory.length);
+        hasPendingHistory.current = false;
+      }, 400);
   };
 
   // Hàm đảo ngược trạng thái cho B, I, U, S

@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { 
   ShieldCheck, Share2, ChevronDown, Star, FolderOpen, 
   CloudCheck, Undo2, Redo2, SpellCheck, PaintRoller, Plus, Minus,
-   Link, Image, AlignLeft, List, ListOrdered, Outdent, Indent,
+  Link, Image, AlignLeft, List, ListOrdered, Outdent, Indent,
   History, Lock, FilePlus, Download, ChevronRight
 } from 'lucide-react';
 
@@ -25,6 +25,11 @@ export const Header = ({ title, onTitleChange, savingStatus, onNewDocument, onUn
     const [showSizeMenu, setShowSizeMenu] = useState(false);
     const sizeOptions = [8, 9, 10, 11, 12, 14, 18, 24, 30, 36, 48, 60, 72, 96];
     const [showColorMenu, setShowColorMenu] = useState(false);
+    const [linkUrl, setLinkUrl] = useState("");
+    const [linkText, setLinkText] = useState("");
+    const [showLinkModal, setShowLinkModal] = useState(false);
+    const [showImageMenu, setShowImageMenu] = useState(false);
+    const fileInputRef = React.useRef(null);
 
     // Hàm xử lý khi nhấn "Mới"
     const handleNewDoc = () => {
@@ -46,7 +51,7 @@ export const Header = ({ title, onTitleChange, savingStatus, onNewDocument, onUn
         }
     };
 
-    // Hàm xử lý cỡ chữ
+    // Hàm xử lý cỡ chữ tăng / giảm
     const handleIncrease = (e) => {
         e.preventDefault();
         saveSelection(); 
@@ -75,6 +80,7 @@ export const Header = ({ title, onTitleChange, savingStatus, onNewDocument, onUn
         setShowColorMenu(false);
     };
 
+    // Xử lý chọn size chữ
     const handleSizeSelect = (e, size) => {
         if (e) {
             e.preventDefault();
@@ -93,19 +99,14 @@ export const Header = ({ title, onTitleChange, savingStatus, onNewDocument, onUn
 
         // KIỂM TRA BÔI ĐEN
         if (selection.toString().length > 0) {
-            // Bật chế độ dùng CSS thay vì thẻ font cũ
             document.execCommand('styleWithCSS', false, true);
-            // Tạm thời dùng fontSize 7 để đánh dấu vùng chọn
             document.execCommand('fontSize', false, '7');
 
-            // Tìm các thẻ font hoặc span có size 7 VỪA TẠO TRONG BLOCK ĐÓ
             if (targetBlock) {
                 const marks = targetBlock.querySelectorAll('font[size="7"], span[style*="xxx-large"]');
-                
                 marks.forEach(el => {
                     el.removeAttribute('size');
                     el.style.fontSize = `${size}px`;
-                    // Đảm bảo không bị ghi đè bởi style mặc định của block
                     el.style.display = 'inline-block'; 
                     el.style.lineHeight = '1';
                 });
@@ -114,11 +115,9 @@ export const Header = ({ title, onTitleChange, savingStatus, onNewDocument, onUn
         // TRƯỜNG HỢP KHÔNG BÔI ĐEN (Chỉ focus)
         else if (targetBlock) {
             targetBlock.style.fontSize = `${size}px`;
-            // Xóa font-size của các con để thừa hưởng từ block cha
             targetBlock.querySelectorAll('span').forEach(s => s.style.fontSize = 'inherit');
         }
 
-        // Gửi tín hiệu để DocumentEditor lưu HTML mới
         if (targetBlock) {
             targetBlock.dispatchEvent(new Event('input', { bubbles: true }));
         }
@@ -127,42 +126,140 @@ export const Header = ({ title, onTitleChange, savingStatus, onNewDocument, onUn
         setShowSizeMenu(false);
     };
 
-   const handleFontSelect = (e, font) => {
-    if (e) {
-        e.preventDefault(); // Cực kỳ quan trọng để giữ bôi đen
-        e.stopPropagation();
-    }
-    
-    restoreSelection(); // Đưa vùng bôi đen trở lại editor
+    // Xử lý chọn font chữ
+    const handleFontSelect = (e, font) => {
+      if (e) {
+          e.preventDefault(); // Cực kỳ quan trọng để giữ bôi đen
+          e.stopPropagation();
+      }
+      
+      restoreSelection(); // Đưa vùng bôi đen trở lại editor
 
-    const selection = window.getSelection();
-    if (!selection || selection.rangeCount === 0) return;
+      const selection = window.getSelection();
+      if (!selection || selection.rangeCount === 0) return;
 
-    const range = selection.getRangeAt(0);
-    const isTextSelected = selection.toString().length > 0;
+      const isTextSelected = selection.toString().length > 0;
 
-    if (isTextSelected) {
-        // Áp dụng font cho vùng bôi đen
-        document.execCommand('styleWithCSS', false, true);
-        document.execCommand('fontName', false, font);
-    } else {
-        // Nếu không bôi đen, áp dụng cho block cha (như bạn đã làm)
-        const node = selection.anchorNode;
-        const targetBlock = node.nodeType === 1 ? node.closest('.block-contenteditable') : node.parentElement?.closest('.block-contenteditable');
-        if (targetBlock) {
-            targetBlock.style.fontFamily = font;
+      if (isTextSelected) {
+          // Áp dụng font cho vùng bôi đen
+          document.execCommand('styleWithCSS', false, true);
+          document.execCommand('fontName', false, font);
+      } else {
+          // Nếu không bôi đen, áp dụng cho block cha 
+          const node = selection.anchorNode;
+          const targetBlock = node.nodeType === 1 ? node.closest('.block-contenteditable') : node.parentElement?.closest('.block-contenteditable');
+          if (targetBlock) {
+              targetBlock.style.fontFamily = font;
+          }
+      }
+        // Luôn phát sự kiện input để lưu dữ liệu
+        const activeBlock = selection.anchorNode.parentElement?.closest('.block-contenteditable');
+        if (activeBlock) {
+            activeBlock.dispatchEvent(new Event('input', { bubbles: true }));
         }
-    }
 
-    // Luôn phát sự kiện input để lưu dữ liệu
-    const activeBlock = selection.anchorNode.parentElement?.closest('.block-contenteditable');
-    if (activeBlock) {
-        activeBlock.dispatchEvent(new Event('input', { bubbles: true }));
-    }
+        onFontChange(font);
+        setShowFontMenu(false);
+    };
 
-    onFontChange(font);
-    setShowFontMenu(false);
-};
+    // hàm xử lý chèn link
+    const handleApplyLink = (e) => {
+        if (e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+        
+        restoreSelection();
+        const selection = window.getSelection();
+        if (!selection.rangeCount) return;
+
+        let range = selection.getRangeAt(0);
+        const textToDisplay = linkText || linkUrl;
+
+        if (!linkUrl) {
+            setShowLinkModal(false);
+            return;
+        }
+
+        const link = document.createElement('a');
+        link.href = linkUrl.startsWith('http') ? linkUrl : `https://${linkUrl}`;
+        link.textContent = textToDisplay;
+        link.target = "_blank";
+        link.rel = "noopener noreferrer";
+        link.style.color = "#1a73e8";
+        link.style.textDecoration = "underline";
+        link.style.cursor = "pointer";
+        link.className = "editor-link";
+
+        range.deleteContents();
+        range.insertNode(link);
+
+        // Đưa con trỏ ra sau link
+        const newRange = document.createRange();
+        newRange.setStartAfter(link);
+        newRange.collapse(true);
+        selection.removeAllRanges();
+        selection.addRange(newRange);
+
+        const targetBlock = link.closest('.block-contenteditable');
+        if (targetBlock) {
+            targetBlock.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+
+        setLinkUrl("");
+        setLinkText("");
+        setShowLinkModal(false);
+    };
+
+    // hàm upload file ảnh
+    const handleFileUpload = (e) => {
+        const file = e.target.files[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                const imageUrl = event.target.result;
+                insertImage(imageUrl); 
+            };
+            reader.readAsDataURL(file);
+        }
+        setShowImageMenu(false);
+    };
+
+    // hảm xử lý chèn ảnh
+    const insertImage = (url) => {
+        restoreSelection();
+        const selection = window.getSelection();
+        if (!selection.rangeCount) return;
+
+        const range = selection.getRangeAt(0);
+        range.deleteContents();
+        
+        const img = document.createElement('img');
+        img.src = url;
+        img.style.maxWidth = '100%';
+        img.style.height = 'auto';
+        img.style.display = 'inline-block'; // Chuyển thành inline-block để không làm vỡ cấu trúc dòng
+        img.style.verticalAlign = 'middle';
+        img.style.margin = '5px 0';
+        img.className = 'editor-image';
+
+        range.insertNode(img);
+
+        //nst space = document.createTextNode('\u00A0'); 
+       //mg.after(space);
+
+        const newRange = document.createRange();
+        newRange.setStartAfter(img);
+      //newRange.setStartAfter(space);
+        newRange.collapse(true);
+        selection.removeAllRanges();
+        selection.addRange(newRange);
+
+        const targetBlock = img.closest('.block-contenteditable');
+        if (targetBlock) {
+          targetBlock.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+    };
 
   return (
     <header className="editor-header">
@@ -368,7 +465,6 @@ export const Header = ({ title, onTitleChange, savingStatus, onNewDocument, onUn
                 </div>
               )}
             </div>
-
             <div className="size-btn" onMouseDown={handleIncrease} title="Tăng cỡ chữ (Ctrl+Shift+.)">
               <Plus size={14} />
             </div>
@@ -430,9 +526,8 @@ export const Header = ({ title, onTitleChange, savingStatus, onNewDocument, onUn
                     onFormat('bold');
                 }}
             >
-                <span style={{ fontWeight: 'bold' }}>B</span>
+              <span style={{ fontWeight: 'bold' }}>B</span>
             </div>
-            
             <div 
                 className={`tb-icon-wrapper ${format.italic ? 'active' : ''}`} 
                 onMouseDown={(e) => {
@@ -441,9 +536,8 @@ export const Header = ({ title, onTitleChange, savingStatus, onNewDocument, onUn
                     onFormat('italic');
                 }}
             >
-                <span style={{ fontStyle: 'italic', fontFamily: 'serif' }}>I</span>
+              <span style={{ fontStyle: 'italic', fontFamily: 'serif' }}>I</span>
             </div>
-
             <div 
                 className={`tb-icon-wrapper ${format.underline ? 'active' : ''}`} 
                 onMouseDown={(e) => {
@@ -452,9 +546,8 @@ export const Header = ({ title, onTitleChange, savingStatus, onNewDocument, onUn
                     onFormat('underline');
                 }}
             >
-                <span style={{ textDecoration: 'underline' }}>U</span>
+              <span style={{ textDecoration: 'underline' }}>U</span>
             </div>
-
             <div 
                 className={`tb-icon-wrapper ${format.strikethrough ? 'active' : ''}`} 
                 onMouseDown={(e) => {
@@ -463,15 +556,96 @@ export const Header = ({ title, onTitleChange, savingStatus, onNewDocument, onUn
                     onFormat('strikethrough');
                 }}
             >
-                <span style={{ textDecoration: 'line-through' }}>S</span>
+              <span style={{ textDecoration: 'line-through' }}>S</span>
             </div>
           </div>
 
           <div className="tb-divider" />
 
-          <div className="tb-group">
+          <div
+            className={`tb-icon-wrapper ${showLinkModal ? 'active' : ''}`}
+            onMouseDown={(e) => {
+              e.preventDefault();
+              saveSelection();
+
+              const selectedText = window.getSelection().toString();
+              if (selectedText) setLinkText(selectedText);
+              setShowLinkModal(!showLinkModal);
+            }}
+          >
             <Link size={28} className="tb-icon" />
-            <Image size={28} className="tb-icon" />
+
+            {showLinkModal && (
+              <div className="link-props-modal" onMouseDown={(e) => e.stopPropagation()}>
+                <div className="link-inputs-container">
+                  {/* Ô nhập Văn bản hiển thị */}
+                  <div className="link-input-group">
+                    <AlignLeft size={16} className="input-icon" />
+                    <input
+                      type="text"
+                      placeholder="Văn bản"
+                      value={linkText}
+                      onChange={(e) => setLinkText(e.target.value)}
+                    />
+                  </div>
+
+                  {/* Ô nhập Link/Đường dẫn */}
+                  <div className="link-input-group">
+                    <Link size={16} className="input-icon" />
+                    <input
+                      type="text"
+                      placeholder="Tìm hoặc dán một đường dẫn"
+                      value={linkUrl}
+                      onChange={(e) => setLinkUrl(e.target.value)}
+                      autoFocus
+                    />
+                  </div>
+                </div>
+                
+                <button className="link-apply-btn" onMouseDown={handleApplyLink}>
+                  Áp dụng
+                </button>
+              </div>
+            )}
+          </div>
+
+          <div className="tb-group" style={{ position: 'relative' }}>
+            <div 
+                className={`tb-icon-wrapper ${showImageMenu ? 'active' : ''}`}
+                onMouseDown={(e) => {
+                    e.preventDefault();
+                    saveSelection();
+                    setShowImageMenu(!showImageMenu);
+                }}
+            >
+                <Image size={28} className="tb-icon" />
+            </div>
+
+            {showImageMenu && (
+                <div className="dropdown-menu image-menu" style={{ width: '200px' }}>
+                    <div 
+                      className="menu-item" 
+                      onMouseDown={(e) => {
+                        e.preventDefault(); 
+                        fileInputRef.current.click();
+                      }} 
+                     >
+                        <div className="menu-item-left">
+                            <Download size={16} style={{ transform: 'rotate(180deg)' }} />
+                            <span>Tải lên từ máy tính</span>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Input ẩn để chọn file */}
+            <input 
+                type="file" 
+                ref={fileInputRef} 
+                style={{ display: 'none' }} 
+                accept="image/*"
+                onChange={handleFileUpload}
+            />
           </div>
 
           <div className="tb-divider" />

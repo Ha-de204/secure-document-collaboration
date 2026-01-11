@@ -292,7 +292,7 @@ body {
 }
 
 .tb-icon-wrapper:hover {
-    background-color: #f1f3f4;
+    background-color: #969696bd;
 }
 
 .tb-divider {
@@ -523,6 +523,176 @@ body {
     border-radius: 50%;
     box-shadow: 0 0 2px rgba(0,0,0,0.5);
 }
+
+/* popup link*/
+.tb-icon-wrapper {
+    position: relative;
+}
+
+.link-props-modal {
+    position: absolute;
+    top: 40px;            
+    left: 50%;            
+    transform: translateX(-50%); 
+    width: 350px;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 1px 3px 0 rgba(60,64,67,0.302), 0 4px 8px 3px rgba(60,64,67,0.149);
+    padding: 16px;
+    z-index: 1000;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.link-inputs-container {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    flex: 1;
+}
+
+.link-input-group {
+    display: flex;
+    align-items: center;
+    border: 1px solid #dadce0;
+    border-radius: 4px;
+    padding: 0 12px;
+    height: 36px;
+}
+
+.link-input-group:focus-within {
+    border: 2px solid #2470d3; 
+}
+
+.link-input-group input {
+    border: none;
+    outline: none;
+    padding: 8px;
+    width: 100%;
+    font-size: 14px;
+}
+
+.input-icon {
+    color: #5f6368;
+}
+
+.link-apply-btn {
+    align-self: flex-end; 
+    background: none;
+    border: none;
+    color: #1a73e8;
+    font-weight: 500;
+    cursor: pointer;
+    padding: 8px 16px;
+    border-radius: 4px;
+}
+
+.link-apply-btn:hover {
+    background-color: #f6fafe;
+}
+
+/* Style cho link trong Editor */
+.block-contenteditable a {
+    color: #1155cc;
+    text-decoration: underline;
+    cursor: pointer !important;
+    pointer-events: auto !important;
+}
+
+.link-preview-tooltip {
+    background: white;
+    border-radius: 4px;
+    box-shadow: 0 1px 3px rgba(60,64,67,0.3), 0 4px 8px 3px rgba(60,64,67,0.15);
+    padding: 8px 12px;
+    display: flex;
+    align-items: center;
+    font-family: 'Roboto', Arial, sans-serif;
+}
+
+.tooltip-url {
+    color: #1a73e8;
+    text-decoration: none;
+    max-width: 200px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 14px;
+}
+
+.tooltip-url:hover {
+    text-decoration: underline;
+}
+
+.tooltip-divider {
+    width: 1px;
+    height: 20px;
+    background: #dadce0;
+    margin: 0 12px;
+}
+
+.tooltip-btn {
+    background: none;
+    border: none;
+    color: #5f6368;
+    font-size: 13px;
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: 4px;
+}
+
+.tooltip-btn:hover {
+    background: #f1f3f4;
+}
+
+/* image */
+.image-menu {
+    position: absolute;
+    top: 40px;
+    left: 0;
+    background: white;
+    border-radius: 4px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+    padding: 6px 0;
+    z-index: 1000;
+}
+
+.image-menu .menu-item {
+    padding: 8px 16px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    font-size: 14px;
+}
+
+.image-menu .menu-item:hover {
+    background-color: #f1f3f4;
+}
+
+.image-menu .menu-item-left {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.block-contenteditable img {
+   max-width: 100%;
+    height: auto;
+    cursor: pointer !important;
+    display: inline-block;
+    vertical-align: middle;
+    /* Ép trình duyệt cho phép chọn ảnh như một khối */
+    user-select: none;
+    transition: box-shadow 0.2s;
+}
+
+/* Khi click vào ảnh hoặc ảnh có focus */
+.block-contenteditable img:focus,
+.block-contenteditable img::selection {
+    outline: 3px solid #4285f4 !important;
+    box-shadow: 0 0 0 3px rgba(66, 133, 244, 0.3);
+}
+
 
 /* 6. Vùng soạn thảo (Canvas) */
 .editor-main {
