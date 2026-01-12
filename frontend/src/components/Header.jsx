@@ -1,9 +1,10 @@
+/* global html2pdf */
 import React, { useState } from 'react';
 import { 
-  ShieldCheck, Share2, ChevronDown, Star, FolderOpen, 
+  ShieldCheck, Share2, ChevronDown,
   CloudCheck, Undo2, Redo2, SpellCheck, PaintRoller, Plus, Minus,
-  Link, Image, AlignLeft, List, ListOrdered, Outdent, Indent,
-  History, Lock, FilePlus, Download, ChevronRight, AlignCenter, AlignRight, AlignJustify
+  Link, Image, Table, AlignLeft, List, ListOrdered, Outdent, Indent,
+  History, FilePlus, Download, ChevronRight, AlignCenter, AlignRight, AlignJustify
 } from 'lucide-react';
 
 const colorPalette = [
@@ -45,6 +46,12 @@ export const Header = ({ title, onTitleChange, savingStatus, onNewDocument, onUn
     const [showAlignMenu, setShowAlignMenu] = useState(false);
     const [showBulletMenu, setShowBulletMenu] = useState(false);
     const [showNumberMenu, setShowNumberMenu] = useState(false);
+    const [showInsertMenu, setShowInsertMenu] = useState(false);
+    const [showInsertImageSub, setShowInsertImageSub] = useState(false); 
+    const [showTableGrid, setShowTableGrid] = useState(false);
+    const [gridSize, setGridSize] = useState({ rows: 0, cols: 0 });
+    const [showSharePopup, setShowSharePopup] = useState(false);
+    const [copyStatus, setCopyStatus] = useState("Sao chép đường liên kết");
 
     // Hàm xử lý khi nhấn "Mới"
     const handleNewDoc = () => {
@@ -322,6 +329,81 @@ export const Header = ({ title, onTitleChange, savingStatus, onNewDocument, onUn
         }
     };
 
+    // hàm xuất pdf
+    const handleDownloadPDF = () => {
+        const element = document.querySelector('.document-paper'); 
+        if (!element) return;
+
+        const opt = {
+            margin: [10, 10],
+            filename: `${title}.pdf`,
+            image: { type: 'jpeg', quality: 0.98 },
+            html2canvas: { scale: 2, useCORS: true },
+            jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+        };
+
+        html2pdf().set(opt).from(element).save();
+        setShowFileMenu(false);
+    };
+
+    // hàm xuất docx
+    const handleDownloadDocx = () => {
+        const element = document.querySelector('.document-paper');
+        if (!element) return;
+
+        // Lấy nội dung HTML và bọc trong template chuẩn Word
+        const content = `
+          <!DOCTYPE html>
+          <html>
+            <head>
+              <meta charset="utf-8">
+              <style>
+                body { font-family: 'Times New Roman', serif; line-height: 1.5; }
+                ul { list-style-type: disc; }
+                ol { list-style-type: decimal; }
+                .nested-counter-list li { list-style-type: none; }
+              </style>
+            </head>
+            <body>
+              ${element.innerHTML}
+            </body>
+          </html>
+        `;
+
+        // Sử dụng thư viện html-docx-js (đã load từ script tag)
+        const converted = window.htmlDocx.asBlob(content);
+        
+        const url = URL.createObjectURL(converted);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `${title}.docx`;
+        link.click();
+        setShowFileMenu(false);
+    };
+
+    // chèn bảng
+    const insertDynamicTable = (rows, cols) => {
+        restoreSelection();
+        let tableHTML = `<table style="width:100%; border-collapse: collapse; margin: 10px 0;" border="1"><tbody>`;
+        for (let i = 0; i < rows; i++) {
+            tableHTML += '<tr>';
+            for (let j = 0; j < cols; j++) {
+                tableHTML += `<td style="padding: 8px; border: 1px solid #ccc; min-height: 20px;">&nbsp;</td>`;
+            }
+            tableHTML += '</tr>';
+        }
+        tableHTML += `</tbody></table><p>&nbsp;</p>`;
+        
+        setTimeout(() => {
+            document.execCommand('insertHTML', false, tableHTML);
+            
+            // 4. Đóng menu
+            setShowInsertMenu(false);
+            setShowTableGrid(false);
+            setGridSize({ rows: 0, cols: 0 });
+        }, 10);
+    };
+
   return (
     <header className="editor-header">
       {/* Hàng 1: Menu & Actions */}
@@ -346,9 +428,6 @@ export const Header = ({ title, onTitleChange, savingStatus, onNewDocument, onUn
                 </div>
 
                 <div className="title-actions">
-                    <Star size={26} className="title-icon" />
-                    <FolderOpen size={26} className="title-icon" />
-                    
                     {savingStatus === 'saving' ? (
                     <span style={{ fontSize: '13px', color: '#5f6368', marginLeft: '8px', whiteSpace: 'nowrap' }}>
                         Đang lưu...
@@ -381,10 +460,10 @@ export const Header = ({ title, onTitleChange, savingStatus, onNewDocument, onUn
 
                                 {showDownloadSub && (
                                     <div className="submenu">
-                                    <div className="menu-item">
+                                    <div className="menu-item" onClick={handleDownloadDocx}>
                                         <span>Microsoft Word (.docx)</span>
                                     </div>
-                                    <div className="menu-item">
+                                    <div className="menu-item" onClick={handleDownloadPDF}>
                                         <span>Tài liệu PDF (.pdf)</span>
                                     </div>
                                     </div>
@@ -393,15 +472,127 @@ export const Header = ({ title, onTitleChange, savingStatus, onNewDocument, onUn
                         </div>
                     )}
                 </div>
-                <span>Chèn</span><span>Định dạng</span>
+                <div className="menu-item-container" style={{ position: 'relative' }}>
+                  <span onClick={() => setShowInsertMenu(!showInsertMenu)} onMouseDown={() => saveSelection()} >Chèn</span>
+
+                  {showInsertMenu && (
+                      <div className="dropdown-menu main-menu">
+                          {/* 1. HÌNH ẢNH - Gọi lại fileInputRef đã có */}
+                          <div 
+                              className="menu-item has-submenu" 
+                              onMouseEnter={() => setShowInsertImageSub(true)} 
+                              onMouseLeave={() => setShowInsertImageSub(false)}
+                          >
+                              <div className="menu-item-left">
+                                  <Image size={16} /> <span>Hình ảnh</span>
+                              </div>
+                              <ChevronRight size={14} />
+                              
+                              {showInsertImageSub && (
+                                  <div className="submenu">
+                                      <div className="menu-item" onClick={() => {
+                                          fileInputRef.current.click(); // Gọi ref của input file ở toolbar
+                                          setShowInsertMenu(false);
+                                      }}>
+                                          <span>Tải lên từ máy tính</span>
+                                      </div>
+                                  </div>
+                              )}
+                          </div>
+
+                          {/* 2. BẢNG */}
+                          <div 
+                              className="menu-item has-submenu" 
+                              onMouseEnter={() => setShowTableGrid(true)} 
+                              onMouseLeave={() => {
+                                  setShowTableGrid(false);
+                                  setGridSize({ rows: 0, cols: 0 });
+                              }}
+                          >
+                              <div className="menu-item-left">
+                                  <Table size={16} /> <span>Bảng</span>
+                              </div>
+                              <ChevronRight size={14} />
+
+                              {showTableGrid && (
+                                  <div className="submenu table-grid-picker">
+                                      <div className="grid-container">
+                                          {[...Array(5)].map((_, r) => (
+                                              <div key={r} className="grid-row">
+                                                  {[...Array(5)].map((_, c) => (
+                                                      <div 
+                                                          key={c} 
+                                                          className={`grid-cell ${(r < gridSize.rows && c < gridSize.cols) ? 'active' : ''}`}
+                                                          onMouseEnter={() => setGridSize({ rows: r + 1, cols: c + 1 })}
+                                                          onClick={() => insertDynamicTable(r + 1, c + 1)}
+                                                      />
+                                                  ))}
+                                              </div>
+                                          ))}
+                                      </div>
+                                      <div className="grid-label">{gridSize.rows} x {gridSize.cols}</div>
+                                  </div>
+                              )}
+                          </div>
+
+                          {/* 3. ĐƯỜNG LIÊN KẾT - Gọi lại Modal Link đã có */}
+                          <div className="menu-item" onClick={() => {
+                              saveSelection(); // Quan trọng: Lưu vị trí con trỏ trước khi mở modal
+                              const selectedText = window.getSelection().toString();
+                              if (selectedText) setLinkText(selectedText);
+                              
+                              setShowLinkModal(true); // Mở Modal bạn đã viết ở Toolbar
+                              setShowInsertMenu(false);
+                          }}>
+                              <div className="menu-item-left">
+                                  <Link size={16} /> <span>Đường liên kết</span>
+                              </div>
+                             
+                          </div>
+                      </div>
+                  )}
+                </div>
+                
             </nav>
           </div>
         </div>
         <div className="header-right">
           <History size={32} className="right-icon" />
-          <button className="share-btn">
-            <Lock size={16} /> <Share2 size={16} /> Chia sẻ <ChevronDown size={14} />
-          </button>
+          
+          <div className="share-wrapper" style={{ position: 'relative' }}>
+            <button 
+              className="share-btn" 
+              onClick={() => setShowSharePopup(!showSharePopup)}
+            >
+              <Share2 size={16} /> Chia sẻ <ChevronDown size={14} />
+            </button>
+
+            {showSharePopup && (
+              <div className="share-popup-dropdown">
+                <div 
+                  className="share-popup-item" 
+                  onClick={async () => {
+                    try {
+                      await navigator.clipboard.writeText(window.location.href);
+                      setCopyStatus("Đã sao chép!");
+                      setTimeout(() => {
+                        setCopyStatus("Sao chép đường liên kết");
+                        setShowSharePopup(false);
+                      }, 1500);
+                    } catch (err) {
+                      console.error("Lỗi sao chép:", err);
+                    }
+                  }}
+                >
+                  <Link size={18} />
+                  <span>{copyStatus}</span>
+                </div>
+                
+                <div className="share-popup-divider"></div>
+              </div>
+            )}
+          </div>
+
           <div className="avatar">T</div>
         </div>
       </div>
