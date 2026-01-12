@@ -275,13 +275,14 @@ body {
     padding: 6px;
     border-radius: 4px;
     cursor: pointer;
+  
 }
 
-.tb-icon:hover { background: var(--primary-blue-hover); }
+.tb-icon:hover { background:#969696bd }
 
 .tb-icon-wrapper {
-    width: 32px;
-    height: 32px;
+    width: 36px;
+    height: 36px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -681,18 +682,208 @@ body {
     cursor: pointer !important;
     display: inline-block;
     vertical-align: middle;
-    /* Ép trình duyệt cho phép chọn ảnh như một khối */
     user-select: none;
     transition: box-shadow 0.2s;
 }
 
-/* Khi click vào ảnh hoặc ảnh có focus */
 .block-contenteditable img:focus,
 .block-contenteditable img::selection {
     outline: 3px solid #4285f4 !important;
     box-shadow: 0 0 0 3px rgba(66, 133, 244, 0.3);
 }
 
+/* danh sach */
+.block-contenteditable ul, 
+.block-contenteditable ol {
+    margin-left: 0; 
+    padding-left: 35px;
+}
+
+.block-contenteditable ul {
+    list-style-type: disc;
+}
+.block-contenteditable ul ul { list-style-type: circle; }
+.block-contenteditable ul ul ul { list-style-type: square; }
+
+.block-contenteditable ol:not(.nested-counter-list) {
+    list-style-type: decimal;
+}
+
+.nested-counter-list {
+    list-style-type: none !important;
+    counter-reset: item;
+    padding-left: 40px; 
+    margin: 0;
+    padding-left: 30px;
+}
+
+.nested-counter-list li {
+    display: block;
+    position: relative;
+    counter-increment: item; 
+    margin-bottom: 2px;
+    min-height: 1.5em;
+}
+
+ol.nested-counter-list > li::before {
+    content: counters(item, ".") ". "; 
+    position: absolute;
+    left: -40px; 
+    min-width: 35px;
+    text-align: right;
+    font-weight: normal;
+    color: inherit;
+    top: 0;
+}
+
+.nested-counter-list li > ol {
+    counter-reset: item;
+    padding-left: 25px; 
+    margin-top: 4px;
+    display: block;
+}
+
+ul.bullet-variant-2 {
+    list-style: none;
+    padding-left: 30px;
+}
+
+ul.bullet-variant-2 > li::before {
+    content: "➤";
+    margin-right: 8px;
+}
+
+ul[class^="bullet-variant"] > li::before {
+    counter-increment: none;
+}
+
+/* Khi lồng thêm 1 cấp OL bên trong cấp cũ */
+.nested-counter-list ol {
+    list-style-type: none !important;
+    counter-reset: item; 
+    margin: 0;
+    padding-left: 30px;
+}
+
+/* Container chung cho các popup icon */
+.tb-popup-wrapper {
+    display: flex;
+    align-items: center;
+}
+
+/* Align Popup */
+.align-menu-popup {
+    padding: 4px !important;
+    min-width: auto !important;
+}
+
+.align-grid-row {
+    display: flex;
+    gap: 4px;
+}
+
+.menu-item-icon {
+    padding: 8px;
+    border-radius: 4px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.menu-item-icon:hover {
+    background-color: #f1f3f4;
+}
+
+/* List Style Popup */
+.list-style-popup {
+    width: 260px !important; /* Thu nhỏ chiều rộng lại cho vừa 3 item */
+    padding: 8px !important;
+    background: white;
+    border: 1px solid #dadce0;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    border-radius: 8px;
+}
+
+.list-style-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+}
+
+.list-style-item {
+    border: 1px solid #efefef;
+    border-radius: 4px;
+    padding: 8px;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+
+.list-style-item:hover {
+    background-color: #f8f9fa;
+    border-color: #1a73e8;
+}
+
+/* Các dòng giả lập bên trong ô */
+.preview-line {
+    display: flex;
+    align-items: center;
+    margin-bottom: 4px;
+}
+
+.preview-line .symbol {
+    min-width: 22px;
+    width: auto;
+    font-size: 10px;
+    font-weight: bold;
+    color: #000;
+}
+
+.preview-line .line {
+    height: 2px;
+    background: #e8eaed;
+    flex-grow: 1;
+}
+
+/* Thụt lề cho các cấp 2 và 3 */
+.indent-2 { margin-left: 10px; }
+.indent-3 { margin-left: 20px; }
+
+/* Định nghĩa Ký hiệu cho từng biến thể Bullet (Dựa trên class bullet-variant-X) */
+.bullet-variant-1 .preview-line:nth-child(1) .symbol::before { content: "●"; }
+.bullet-variant-1 .preview-line:nth-child(2) .symbol::before { content: "○"; }
+.bullet-variant-1 .preview-line:nth-child(3) .symbol::before { content: "■"; }
+
+.bullet-variant-2 .preview-line:nth-child(1) .symbol::before { content: "➤" !important; }
+.bullet-variant-2 .preview-line:nth-child(2) .symbol::before { content: "●"; }
+.bullet-variant-2 .preview-line:nth-child(3) .symbol::before { content: "○"; }
+
+.bullet-variant-3 .preview-line:nth-child(1) .symbol::before { content: "■"; }
+.bullet-variant-3 .preview-line:nth-child(2) .symbol::before { 
+    content: "\2713"; 
+}
+.bullet-variant-3 .preview-line:nth-child(3) .symbol::before { content: "○"; }
+
+/* Định nghĩa Ký hiệu cho từng biến thể Number (Dựa trên class number-variant-X) */
+.number-variant-1 .preview-line:nth-child(1) .symbol::before { content: "1."; }
+.number-variant-1 .preview-line:nth-child(2) .symbol::before { content: "a."; }
+.number-variant-1 .preview-line:nth-child(3) .symbol::before { content: "i."; }
+
+.number-variant-2 .preview-line:nth-child(1) .symbol::before { content: "1."; }
+.number-variant-2 .preview-line:nth-child(2) .symbol::before { content: "1.1."; }
+.number-variant-2 .preview-line:nth-child(3) .symbol::before { content: "1.1.1."; }
+
+.number-variant-3 .preview-line:nth-child(1) .symbol::before { content: "A."; }
+.number-variant-3 .preview-line:nth-child(2) .symbol::before { content: "B."; }
+.number-variant-3 .preview-line:nth-child(3) .symbol::before { content: "C."; }
+
+
+/* Overlay để đóng khi click ngoài */
+.menu-overlay {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    z-index: 99;
+}
 
 /* 6. Vùng soạn thảo (Canvas) */
 .editor-main {
@@ -707,9 +898,9 @@ body {
 /* Tờ giấy A4 */
 .document-paper {
     background: var(--bg-paper);
-    width: 816px; /* Chiều rộng chuẩn A4 */
+    width: 816px; 
     min-height: 1056px;
-    padding: 96px; /* Margin lề giấy */
+    padding: 96px;
     box-shadow: var(--shadow-paper);
     display: flex;
     flex-direction: column;

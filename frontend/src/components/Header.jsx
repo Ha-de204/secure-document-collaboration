@@ -3,7 +3,7 @@ import {
   ShieldCheck, Share2, ChevronDown, Star, FolderOpen, 
   CloudCheck, Undo2, Redo2, SpellCheck, PaintRoller, Plus, Minus,
   Link, Image, AlignLeft, List, ListOrdered, Outdent, Indent,
-  History, Lock, FilePlus, Download, ChevronRight
+  History, Lock, FilePlus, Download, ChevronRight, AlignCenter, AlignRight, AlignJustify
 } from 'lucide-react';
 
 const colorPalette = [
@@ -14,6 +14,18 @@ const colorPalette = [
 ];
 
 let savedSelection = null;
+
+const BULLET_STYLES = [
+  { label: 'disc', value: 'disc', variant: 'bullet-variant-1' },
+  { label: 'arrow', value: 'diamond', variant: 'bullet-variant-2' }, 
+  { label: 'check', value: 'square', variant: 'bullet-variant-3' } 
+];
+
+const NUMBER_STYLES = [
+  { label: '1. a. i.', value: 'decimal', variant: 'number-variant-1' },
+  { label: '1. 1.1.', value: 'decimal', variant: 'number-variant-2' },
+  { label: 'A. B. C.', value: 'upper-alpha', variant: 'number-variant-3' }
+];
 
 export const Header = ({ title, onTitleChange, savingStatus, onNewDocument, onUndo, onRedo, canUndo, canRedo, zoom, onZoomChange, fontFamily, onFontChange, fontSize, onFontSizeChange, format = {},  onFormat, onColorChange }) => {
     const [showFileMenu, setShowFileMenu] = useState(false);
@@ -30,6 +42,9 @@ export const Header = ({ title, onTitleChange, savingStatus, onNewDocument, onUn
     const [showLinkModal, setShowLinkModal] = useState(false);
     const [showImageMenu, setShowImageMenu] = useState(false);
     const fileInputRef = React.useRef(null);
+    const [showAlignMenu, setShowAlignMenu] = useState(false);
+    const [showBulletMenu, setShowBulletMenu] = useState(false);
+    const [showNumberMenu, setShowNumberMenu] = useState(false);
 
     // Hàm xử lý khi nhấn "Mới"
     const handleNewDoc = () => {
@@ -72,7 +87,6 @@ export const Header = ({ title, onTitleChange, savingStatus, onNewDocument, onUn
         e.stopPropagation();
         restoreSelection();
 
-        // Thực hiện lệnh đổi màu
         document.execCommand('styleWithCSS', false, true);
         document.execCommand('foreColor', false, color);
         
@@ -129,11 +143,11 @@ export const Header = ({ title, onTitleChange, savingStatus, onNewDocument, onUn
     // Xử lý chọn font chữ
     const handleFontSelect = (e, font) => {
       if (e) {
-          e.preventDefault(); // Cực kỳ quan trọng để giữ bôi đen
+          e.preventDefault(); 
           e.stopPropagation();
       }
       
-      restoreSelection(); // Đưa vùng bôi đen trở lại editor
+      restoreSelection(); 
 
       const selection = window.getSelection();
       if (!selection || selection.rangeCount === 0) return;
@@ -238,19 +252,14 @@ export const Header = ({ title, onTitleChange, savingStatus, onNewDocument, onUn
         img.src = url;
         img.style.maxWidth = '100%';
         img.style.height = 'auto';
-        img.style.display = 'inline-block'; // Chuyển thành inline-block để không làm vỡ cấu trúc dòng
+        img.style.display = 'inline-block'; 
         img.style.verticalAlign = 'middle';
         img.style.margin = '5px 0';
         img.className = 'editor-image';
 
         range.insertNode(img);
-
-        //nst space = document.createTextNode('\u00A0'); 
-       //mg.after(space);
-
         const newRange = document.createRange();
         newRange.setStartAfter(img);
-      //newRange.setStartAfter(space);
         newRange.collapse(true);
         selection.removeAllRanges();
         selection.addRange(newRange);
@@ -258,6 +267,58 @@ export const Header = ({ title, onTitleChange, savingStatus, onNewDocument, onUn
         const targetBlock = img.closest('.block-contenteditable');
         if (targetBlock) {
           targetBlock.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+    };
+
+    const handleListSelect = (e, command, typeValue, variantClass) => {
+        e.preventDefault();
+        e.stopPropagation();
+        restoreSelection();
+
+        document.execCommand(command, false, null);
+
+        const sel = window.getSelection();
+        if (!sel.rangeCount) return;
+
+        let list = sel.anchorNode;
+        while (list && !['UL', 'OL'].includes(list.nodeName)) {
+            list = list.parentNode;
+        }
+
+        if (!list) return;
+
+        // BULLET
+        if (command === 'insertUnorderedList') {
+            list.className = '';
+            list.classList.add(variantClass); 
+            list.style.listStyleType = 'none'; 
+        }
+
+        // NUMBER
+        if (command === 'insertOrderedList') {
+            list.className = 'nested-counter-list';
+            list.style.listStyleType = 'none';
+        }
+
+        setShowBulletMenu(false);
+        setShowNumberMenu(false);
+    };
+
+    const handleToolbarAction = (e, command, value = null) => {
+        e.preventDefault();
+        e.stopPropagation();
+        restoreSelection();
+
+        document.execCommand(command, false, value);
+
+        // Tìm block đang hoạt động để phát sự kiện input (giúp lưu dữ liệu)
+        const selection = window.getSelection();
+
+        if (selection.rangeCount > 0) {
+            const activeBlock = selection.anchorNode.parentElement?.closest('.block-contenteditable');
+            if (activeBlock) {
+                activeBlock.dispatchEvent(new Event('input', { bubbles: true }));
+            }
         }
     };
 
@@ -651,11 +712,123 @@ export const Header = ({ title, onTitleChange, savingStatus, onNewDocument, onUn
           <div className="tb-divider" />
 
           <div className="tb-group">
-            <AlignLeft size={28} className="tb-icon" />
-            <List size={28} className="tb-icon" />
-            <ListOrdered size={28} className="tb-icon" />
-            <Outdent size={28} className="tb-icon" />
-            <Indent size={28} className="tb-icon" />
+            {/* Popup Căn lề */}
+            <div className="tb-popup-wrapper" style={{ position: 'relative' }}>
+                <div 
+                    className={`tb-icon-wrapper ${showAlignMenu ? 'active' : ''}`}
+                    onMouseDown={(e) => { e.preventDefault(); setShowAlignMenu(!showAlignMenu); }}
+                >
+                    <AlignLeft size={34} className="tb-icon" />
+                    <ChevronDown size={14} />
+                </div>
+                
+                {showAlignMenu && (
+                    <div className="dropdown-menu align-menu-popup">
+                        <div className="align-grid-row">
+                            <div className="menu-item-icon" onMouseDown={(e) => { handleToolbarAction(e, 'justifyLeft'); setShowAlignMenu(false); }}>
+                                <AlignLeft size={20} />
+                            </div>
+                            <div className="menu-item-icon" onMouseDown={(e) => { handleToolbarAction(e, 'justifyCenter'); setShowAlignMenu(false); }}>
+                                <AlignCenter size={20} />
+                            </div>
+                            <div className="menu-item-icon" onMouseDown={(e) => { handleToolbarAction(e, 'justifyRight'); setShowAlignMenu(false); }}>
+                                <AlignRight size={20} />
+                            </div>
+                            <div className="menu-item-icon" onMouseDown={(e) => { handleToolbarAction(e, 'justifyFull'); setShowAlignMenu(false); }}>
+                                <AlignJustify size={20} />
+                            </div>
+                        </div>
+                    </div>
+                )}
+            </div>
+
+            {/* Popup Danh sách dấu chấm */}
+            <div className="tb-popup-wrapper" style={{ position: 'relative' }}>
+                <div 
+                    className={`tb-icon-wrapper ${showBulletMenu ? 'active' : ''}`}
+                    onMouseDown={(e) => { e.preventDefault(); setShowBulletMenu(!showBulletMenu); }}
+                >
+                    <List size={34} className="tb-icon" />
+                    <ChevronDown size={14} />
+                </div>
+
+                {showBulletMenu && (
+                  <div className="dropdown-menu list-style-popup">
+                    <div className="list-style-grid">
+                      {BULLET_STYLES.map((type, i) => (
+                        <div key={i} className="list-style-item" onMouseDown={(e) => handleListSelect(e, 'insertUnorderedList', type.value, type.variant)}>
+                          <div className={`list-preview-container bullet-variant-${i + 1}`}>
+                            <div class="preview-line indent-1"> <div class="symbol"></div>
+                                <div class="line"></div>
+                            </div>
+                            <div class="preview-line indent-2"> <div class="symbol"></div>
+                                <div class="line"></div>
+                            </div>
+                            <div class="preview-line indent-3"> <div class="symbol"></div>
+                                <div class="line"></div>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+            </div>
+
+            {/* Popup Danh sách số */}
+            <div className="tb-popup-wrapper" style={{ position: 'relative' }}>
+                <div 
+                    className={`tb-icon-wrapper ${showNumberMenu ? 'active' : ''}`}
+                    onMouseDown={(e) => { e.preventDefault(); setShowNumberMenu(!showNumberMenu); }}
+                >
+                    <ListOrdered size={34} className="tb-icon" />
+                    <ChevronDown size={14} />
+                </div>
+
+                {showNumberMenu && (
+                  <div className="dropdown-menu list-style-popup">
+                    <div className="list-style-grid">
+                      {NUMBER_STYLES.map((type, i) => (
+                        <div key={i} className="list-style-item" onMouseDown={(e) => handleListSelect(e, 'insertOrderedList', type.value)}>
+                          <div className={`list-preview-container number-variant-${i + 1}`}>
+                            <div class="preview-line indent-1"> <div class="symbol"></div>
+                                <div class="line"></div>
+                            </div>
+                            <div class="preview-line indent-2"> <div class="symbol"></div>
+                                <div class="line"></div>
+                            </div>
+                            <div class="preview-line indent-3"> <div class="symbol"></div>
+                                <div class="line"></div>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+            </div>
+
+            <Outdent size={26} className="tb-icon" onMouseDown={(e) => handleToolbarAction(e, 'outdent')} />
+            <Indent 
+              size={26} 
+              className="tb-icon" 
+              onMouseDown={(e) => {
+                handleToolbarAction(e, 'indent');
+                setTimeout(() => {
+                    const sel = window.getSelection();
+                    const parentOL = sel.anchorNode.parentElement.closest('ol');
+                    const parentUL = sel.anchorNode.parentElement.closest('ul');
+
+                    if (parentOL) {
+                        parentOL.classList.add('nested-counter-list');
+                    }
+
+                    if (parentUL) {
+                        parentUL.classList.remove('nested-counter-list'); // cực kỳ quan trọng
+                    }   
+                }, 10);
+              }} 
+            />
           </div>
         </div>
       </div>
