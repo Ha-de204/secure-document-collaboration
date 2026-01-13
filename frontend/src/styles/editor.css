@@ -1,9 +1,9 @@
 /* 1. Biến toàn cục & Reset */
 :root {
-    --bg-canvas: #f8f9fa;       /* Nền xám nhạt ngoài trang giấy */
-    --bg-paper: #ffffff;        /* Màu trắng của trang giấy */
+    --bg-canvas: #f8f9fa;      
+    --bg-paper: #ffffff;        
     --toolbar-bg: #ffffff;
-    --toolbar-pill-bg: #edf2fa; /* Màu xanh nhạt của toolbar mới */
+    --toolbar-pill-bg: #edf2fa; 
     --border-color: #dadce0;
     --primary-blue: #1a73e8;
     --primary-blue-hover: #d3e3fd;
@@ -194,7 +194,6 @@ body {
     background-color: #f1f3f4;
 }
 
-/* Lớp phủ trong suốt để click ra ngoài là đóng menu */
 .menu-overlay {
     position: fixed;
     top: 0;
@@ -381,7 +380,7 @@ body {
     justify-content: space-between;
     padding: 0 8px;
     height: 24px;
-    min-width: 90px; /* Độ rộng hợp lý cho toolbar */
+    min-width: 90px; 
     cursor: pointer;
     border-radius: 4px;
     transition: background 0.2s;
@@ -677,19 +676,49 @@ body {
 }
 
 .block-contenteditable img {
-   max-width: 100%;
+    display: block; 
+    max-width: 100%;
     height: auto;
-    cursor: pointer !important;
-    display: inline-block;
-    vertical-align: middle;
+    cursor: nwse-resize; 
+    position: relative;
     user-select: none;
-    transition: box-shadow 0.2s;
+    -webkit-user-drag: none;
 }
 
-.block-contenteditable img:focus,
-.block-contenteditable img::selection {
-    outline: 3px solid #4285f4 !important;
-    box-shadow: 0 0 0 3px rgba(66, 133, 244, 0.3);
+.block-contenteditable img:hover {
+    border: 2px dashed #4285f4; 
+}
+
+.block-contenteditable img:active {
+    border: 2px solid #4285f4; 
+}
+
+.block-contenteditable img.resizing-active {
+    outline: 2px solid #4285f4;
+    box-shadow: 0 0 10px rgba(66, 133, 244, 0.3);
+}
+
+.resizable-img {
+    display: inline-block;
+    max-width: 100%;
+    resize: horizontal; 
+    overflow: auto;
+    border: 2px solid transparent;
+    transition: border 0.2s;
+}
+
+.resizable-img:hover {
+    border: 2px dashed #4285f4;
+    cursor: nw-resize;
+}
+
+.resizable-img:active {
+    border: 2px solid #4285f4;
+}
+
+.img-container {
+    display: block;
+    margin: 10px 0;
 }
 
 /* danh sach */
@@ -1012,7 +1041,7 @@ ul[class^="bullet-variant"] > li::before {
 /* Style cho popup share*/
 .share-popup-dropdown {
   position: absolute;
-  top: calc(100% + 8px); /* Hiển thị ngay dưới nút */
+  top: calc(100% + 8px); 
   right: 0;
   background: white;
   border-radius: 8px;
@@ -1058,3 +1087,4 @@ ul[class^="bullet-variant"] > li::before {
         width: 100% !important;
     }
 }
+
