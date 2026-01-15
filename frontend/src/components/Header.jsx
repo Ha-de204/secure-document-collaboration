@@ -28,7 +28,7 @@ const NUMBER_STYLES = [
   { label: 'A. B. C.', value: 'upper-alpha', variant: 'number-variant-3' }
 ];
 
-export const Header = ({ title, onTitleChange, savingStatus, onNewDocument, onUndo, onRedo, canUndo, canRedo, zoom, onZoomChange, fontFamily, onFontChange, fontSize, onFontSizeChange, format = {},  onFormat, onColorChange, onAlign, activeBlockId, }) => {
+export const Header = ({ title, onTitleChange, savingStatus, onNewDocument, onUndo, onRedo, canUndo, canRedo, zoom, onZoomChange, fontFamily, onFontChange, fontSize, onFontSizeChange, format = {},  onFormat, onColorChange, onAlign, activeBlockId, userName, onLogout }) => {
   const [showFileMenu, setShowFileMenu] = useState(false);
   const [showDownloadSub, setShowDownloadSub] = useState(false);
   const [showZoomMenu, setShowZoomMenu] = useState(false);
@@ -71,6 +71,11 @@ export const Header = ({ title, onTitleChange, savingStatus, onNewDocument, onUn
       sel.removeAllRanges();
       sel.addRange(savedSelection);
     }
+  };
+
+  // hàm lấy chữ cái đầu tiên của tên làm avatar
+  const getInitials = (name) => {
+    return name ? name.charAt(0).toUpperCase() : "?";
   };
 
   // Hàm xử lý cỡ chữ tăng / giảm
@@ -640,7 +645,14 @@ export const Header = ({ title, onTitleChange, savingStatus, onNewDocument, onUn
             )}
           </div>
 
-          <div className="avatar">T</div>
+          <div className="user-profile">
+            <div className="avatar">
+              {getInitials(userName)}
+            </div>
+            <button className="logout-btn" onClick={onLogout} title="Đăng xuất">
+              Thoát
+            </button>
+          </div>
         </div>
       </div>
 

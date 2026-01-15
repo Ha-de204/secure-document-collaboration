@@ -18,27 +18,36 @@ const Auth = ({ onAuthSuccess }) => {
     const clientHashedPassword = sha256(formData.password);
 
     try {
-      const endpoint = isLogin ? '/api/login' : '/api/register';
-      const response = await fetch(`http://localhost:5000${endpoint}`, {
+      const baseUrl = process.env.REACT_APP_API_URL;
+      console.log("Base API URL:", baseUrl);
+
+      if (!baseUrl) {
+        alert("Lỗi: Không tìm thấy VITE_API_URL. Hãy kiểm tra lại file .env và restart frontend!");
+        return;
+      }
+      const endpoint = isLogin ? '/users/login' : '/users/register';
+      const response = await fetch(`${baseUrl}${endpoint}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({
           userName: formData.userName,
           password: clientHashedPassword
         }),
       });
 
-      const data = await response.json();
+      const result = await response.json();
 
-      if (!response.ok) throw new Error(data.error || 'Có lỗi xảy ra');
+      if (!response.ok) throw new Error(result.message || 'Có lỗi xảy ra');
 
       if (isLogin) {
         // Lưu Token và Username (để hiển thị)
-        localStorage.setItem('token', data.token);
-        localStorage.setItem('currentUser', data.userName);
-        onAuthSuccess(data);
+        const token = result.data;
+        localStorage.setItem('accessToken', token);
+        localStorage.setItem('currentUser', formData.userName);
+        onAuthSuccess({ token, userName: formData.userName});
       } else {
-        alert('Đăng ký thành công! Đang chuyển về trang đăng nhập.');
+        alert('Đăng ký thành công!');
         setIsLogin(true);
       }
     } catch (err) {

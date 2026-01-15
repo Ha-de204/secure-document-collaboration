@@ -6,7 +6,8 @@ import EditorBlock from './components/EditorBlock';
 import './styles/editor.css';
 import { sha256 } from 'js-sha256';
 
-const DocumentEditor = () => {
+const DocumentEditor = ({ onLogout}) => {
+  const currentUser = localStorage.getItem('currentUser') || "Guest";
   const [blocks, setBlocks] = useState([
     {
       id: 'initial-block',
@@ -266,6 +267,8 @@ const DocumentEditor = () => {
         onColorChange={handleColorChange}
         onAlign={handleAlignBlock}
         activeBlockId={activeBlockId}
+        userName={currentUser}
+        onLogout={onLogout}
       />
       <main className="editor-main">
         <div className="document-paper" style={{ transform: `scale(${zoom / 100})`, transformOrigin: 'top center', fontFamily: fontFamily }}>

@@ -10,14 +10,25 @@ const mongoose = require('mongoose');
 const {connectRedis} = require("./config/redis.js")
 
 var indexRouter = require('./routes/index');
-var usersRouter = require('./routes/users');
+var usersRouter = require('./routes/users.js');
 var blockRouter = require('./routes/block');
 var documentRouter = require('./routes/document');
 
 const { init } = require('./models/Block.js');
 const { initSocket } = require('./sockets/socket.js');
 
+const cors = require('cors');
+
 var app = express();
+
+app.use(cors({
+  origin: 'http://localhost:3000', // frontend
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+}));
+
+app.options('*', cors());
 
 // view engine setup
 app.set('views', path.join(__dirname, 'views'));
@@ -71,6 +82,7 @@ app.use('/users', usersRouter);
 app.use('/blocks', blockRouter);
 app.use('/documents', documentRouter);
 
+
 // catch 404 and forward to error handler
 app.use(function(req, res, next) {
   next(createError(404));
@@ -86,9 +98,10 @@ app.use(function(err, req, res, next) {
   res.status(err.status || 500);
   res.render('error');
 });
-
+/*
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
     console.log(`Server is running on: ${process.env.URL_BACKEND || 'http://localhost:' + PORT}`);
 });
+*/
 module.exports = app;

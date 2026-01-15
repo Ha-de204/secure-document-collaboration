@@ -234,16 +234,41 @@ body {
 
 .share-btn:hover { box-shadow: 0 1px 2px rgba(0,0,0,0.1); }
 
+/* profile */
+.user-profile {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 8px;
+  border-radius: 20px;
+  background: #f1f5f9;
+}
+
 .avatar {
     width: 32px;
     height: 32px;
-    background: #f4511e;
+    background-color: #1d70f6;
     color: #fff;
     border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-weight: 500;
+    font-weight: bold;
+    font-size: 14px;
+}
+
+.logout-btn {
+  border: none;
+  background: none;
+  color: #ef4444;
+  font-size: 13px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-left: 1px solid #cbd5e1;
+}
+
+.logout-btn:hover {
+  text-decoration: underline;
 }
 
 /* 5. Toolbar (Pill Style) */
