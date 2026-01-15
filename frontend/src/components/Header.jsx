@@ -1062,7 +1062,7 @@ export const Header = ({ title, onTitleChange, savingStatus, onNewDocument, onUn
                   }
 
                   if (parentUL) {
-                     parentUL.classList.remove('nested-counter-list'); // cực kỳ quan trọng
+                     parentUL.classList.remove('nested-counter-list');
                   }   
                 }, 10);
               }} 
