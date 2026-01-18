@@ -4,6 +4,7 @@ const mongoose = require('mongoose')
 const Document = new mongoose.Schema({
     ownerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required : true},
     title: {type: String, required: false},
+    epoch: {type: Number, required: true},
     metadata: {type: Object},
     shareWith: [{
         userId: {type: mongoose.Schema.Types.ObjectId, ref: 'User'},

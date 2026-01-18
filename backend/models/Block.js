@@ -7,9 +7,11 @@ const Block = new mongoose.Schema({
     documentId: { type: mongoose.Schema.Types.ObjectId, ref: 'Document' ,required: true},
     index: { type: Number, required: true },
     version: { type: Number, required: true},
+    epoch: { type: Number, required: true },
     cipherText: { type: String, required: true },
     prevHash: {type: String, required: true},
-    hash: { type: String, required: true }
+    hash: { type: String, required: true },
+    createAt: {type: Date, default: Date.now}
 })
 
 module.exports = mongoose.model('Block', Block);
