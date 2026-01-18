@@ -5,6 +5,6 @@ class DocumentRootKey {
     this.encryptedDRK = encryptedDRK; 
     this.signedBy = signedBy;  
     this.signature = signature; 
-    this.createAt = Date.now()
+    this.createdAt = Date.now()
   }
 }

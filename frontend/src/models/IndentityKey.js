@@ -1,5 +1,6 @@
 class IdentityKey {
-  constructor({publicKey, privateKeyEncrypted}) {          
+  constructor({userId,publicKey, privateKeyEncrypted}) {   
+    this.userId = userId
     this.identityKey = {
       publicKey: publicKey,               
       privateKeyEncrypted: privateKeyEncrypted 

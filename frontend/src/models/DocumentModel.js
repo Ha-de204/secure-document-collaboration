@@ -5,14 +5,13 @@ export const createClientDocument = (data) => {
     serverId: data._id || null, // Lưu _id của MongoDB sau khi sync
     ownerId: data.ownerId,
     title: data.title || 'Untitled Document',
-    epoch: data.epoch || 0,
+    epoch: data.epoch ?? 0,
     metadata: data.metadata || {},
     
     shareWith: data.shareWith || [], 
     publicMetadata: data.publicMetadata ?? false,
 
-    lastModified: Date.now(),
-    documentRootKeyId: data.documentRootKeyId || null
+    lastModified: Date.now()
   };
 };
 

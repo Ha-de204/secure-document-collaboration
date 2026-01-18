@@ -1,6 +1,6 @@
 class RatchetState {
   constructor({
-    peerId,
+    peerId,     // `${documentId}:${userId}`
     rootKey,
     sendChainKey,
     recvChainKey,
@@ -8,10 +8,9 @@ class RatchetState {
     remotePubKey,
     ns = 0,
     nr = 0,
-    pn = 0,
-    skippedKeys = {}
+    pn = 0
   }) {
-    this.peerId = peerId;           // Định danh phiên (thường là UserId)
+    this.peerId = peerId;           // Định danh phiên `${documentId}:${userId}`
     this.rootKey = rootKey;         // Khóa gốc (RK)
     this.sendChainKey = sendChainKey; // CK gửi
     this.recvChainKey = recvChainKey; // CK nhận
@@ -20,7 +19,6 @@ class RatchetState {
     this.ns = ns;                   // Counter gửi
     this.nr = nr;                   // Counter nhận
     this.pn = pn;                   // Counter của chain trước
-    this.skippedKeys = skippedKeys; // { index: key } - Lưu tin đến trễ
     this.updatedAt = Date.now();
   }
 }

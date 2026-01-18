@@ -10,7 +10,7 @@ export const createClientBlock = (data) => {
     cipherText: data.cipherText,
     prevHash: data.prevHash,
     hash: data.hash,
-    createAt: data.createAt || new Date(),
+    createdAt: data.createdAt || new Date(),
 
 
   };

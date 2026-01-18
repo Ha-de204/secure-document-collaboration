@@ -1,8 +1,9 @@
 export const canAccess = (
-    doccument,
+    document,
     userId,
-    requiredPermission 
+    requiredPermission ='read'
 ) => {
+    if (!document || !userId) return false;
     const { ownerId, shareWith = []} = document;
     if(ownerId.toString() === userId) return true;
     const inDoc = shareWith.find(u => u.userId == userId)
