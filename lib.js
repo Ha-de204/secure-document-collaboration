@@ -183,18 +183,18 @@ async function signWithECDSA (privateKey, message) {
 }
 
 module.exports = {
-  govEncryptionDataStr,
-  bufferToString,
-  genRandomSalt,
-  cryptoKeyToJSON,
-  generateEG,
-  computeDH,
-  verifyWithECDSA,
-  HMACtoAESKey,
-  HMACtoHMACKey,
-  HKDF,
-  encryptWithGCM,
-  decryptWithGCM,
-  generateECDSA,
-  signWithECDSA
+  govEncryptionDataStr, // ko lquan
+  bufferToString, 
+  genRandomSalt, // sinh salt
+  cryptoKeyToJSON, 
+  generateEG, // sinh khoa eg cho double ratchet
+  computeDH, // tinh dh 
+  verifyWithECDSA, // xac thuc bang khoa identity
+  HMACtoAESKey, // doubleratchet
+  HMACtoHMACKey, /// double ratchet
+  HKDF, // dan xuat khoa root va chian key (double ratchet)
+  encryptWithGCM, // ma hoa aes-gcm
+  decryptWithGCM, // giai ma
+  generateECDSA, // sinh khoa identity
+  signWithECDSA // ki bang khoa identity
 }
