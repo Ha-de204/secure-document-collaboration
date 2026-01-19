@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Plus } from 'lucide-react';
 import { Header } from './components/Header';
 import { Footer } from './components/Footer';
@@ -17,6 +17,7 @@ const DocumentEditor = ({ onLogout, socket }) => {
   const cryptoRef = useRef(BlockCryptoModule);
   const drkRef = useRef(null);
   const [documentRootKey, setDocumentRootKey] = useState(null);
+  const [drk, setDrk] = useState(null);
 
   const [blocks, setBlocks] = useState([]);
   const [docTitle, setDocTitle] = useState("Tài liệu không có tiêu đề");
@@ -44,6 +45,19 @@ const DocumentEditor = ({ onLogout, socket }) => {
   });
 
   const cloneBlocks = (blocks) => blocks.map(b => ({ ...b }));
+  
+  const addToHistory = useCallback((newBlocks) => {
+    setHistory(prev => {
+      // Chỉ lấy lịch sử tính đến bước hiện tại (loại bỏ các bước Redo cũ)
+      const newHistory = prev.slice(0, currentIndex + 1);
+      // Lưu bản sao sâu để không bị dính tham chiếu
+      const entry = JSON.parse(JSON.stringify(newBlocks));
+      const finalHistory = [...newHistory, entry];
+      // Giới hạn 30 bước để tránh tốn bộ nhớ
+      return finalHistory.slice(-30);
+    });
+    setCurrentIndex(prev => prev + 1);
+  }, [currentIndex]);
 
   /* ======================================================
      INIT DOCUMENT + ROOT KEY
@@ -51,31 +65,46 @@ const DocumentEditor = ({ onLogout, socket }) => {
   useEffect(() => {
     if (!docID) return;
 
-    // Khởi tạo BlockManager cho document
-    drkRef.current = cryptoRef.current.generateDRK();
-    // Block đầu tiên
-    setBlocks([
-      {
-        id: crypto.randomUUID(),
+    // 1. Khởi tạo DRK (Trong thực tế nên fetch từ server)
+    const newDrk = BlockCryptoModule.generateDRK();
+    setDrk(newDrk);
+
+    // 2. Tạo block đầu tiên có mã hóa
+    const initDoc = async () => {
+      const firstBlockId = crypto.randomUUID();
+      const encrypted = await BlockCryptoModule.encryptBlock("", newDrk, firstBlockId);
+      
+      const firstBlock = {
+        id: firstBlockId,
         content: "",
+        cipherText: encrypted.cipherText,
+        iv: encrypted.iv,
+        version: 1,
+        prevHash: "GENESIS_BLOCK_HASH",
         status: "saved",
         editorName: null,
-      },
-    ]);
+      };
+      
+      const hash = await BlockCryptoModule.calculateBlockHash(firstBlock, newDrk);
+      firstBlock.hash = hash;
 
+      const initialBlocks = [firstBlock];
+      setBlocks(initialBlocks);
+      setHistory([JSON.parse(JSON.stringify(initialBlocks))]);
+      setCurrentIndex(0);
+    };
 
-    // 3. Join socket room
+    initDoc();
     socket.emit("document:join", { documentId: docID });
 
     return () => {
       socket.emit("document:leave", { documentId: docID });
     };
-
-  }, [docID, socket]);
+  }, [docID]);
 
   // --- SOCKET LISTENERS ---
   useEffect(() => {
-    if (!socket || !cryptoRef.current) return;
+    if (!socket || !drk) return;
 
     socket.on("block:locked", ({ blockId, userId }) => {
     setBlocks(prev =>
@@ -132,40 +161,63 @@ const DocumentEditor = ({ onLogout, socket }) => {
 
   const handleBlockChange = (blockId, content) => {
     setSavingStatus('saving');
-    setBlocks(prev =>
-      prev.map(block =>
-        block.id === blockId
-          ? { ...block, content }
-          : block
-      )
+    const newBlocks = blocks.map(block => 
+      block.id === blockId ? { ...block, content } : block
     );
+    setBlocks(newBlocks);
 
-    socket.emit("block:update", {
-      documentId: docID,
-      blockId,
-      content,
-    });
-    setTimeout(() => setSavingStatus('saved'), 600);
+    // Emit update qua socket
+    socket.emit("block:update", { documentId: docID, blockId, content });
+    
+    // Lưu vào history sau một khoảng thời gian ngừng gõ (debounce)
+    clearTimeout(window.saveTimeout);
+    window.saveTimeout = setTimeout(() => {
+      addToHistory(newBlocks);
+      setSavingStatus('saved');
+    }, 1000);
   }; 
 
   // hàm thêm block mới
-  const handleAddBlock = (index) => {
-    const newBlock = {
-      id: crypto.randomUUID(),
-      content: "",
-      status: "saved",
-      editorName: null,
-    };
+  const handleAddBlock = async (index) => {
+    if (!drk) return;
+    const rawDrk = drk instanceof Uint8Array ? drk : new Uint8Array(Object.values(drk));
+    
+    const newBlockId = crypto.randomUUID();
+    const prevBlock = blocks[index];
+    const prevHash = prevBlock ? (prevBlock.hash || "GENESIS_BLOCK_HASH") : "GENESIS_BLOCK_HASH";
 
-    const newBlocks = [...blocks];
-    newBlocks.splice(index + 1, 0, newBlock);
+    try {
+      setSavingStatus('saving');
+      const encrypted = await BlockCryptoModule.encryptBlock("", rawDrk, newBlockId);
 
-    setBlocks(newBlocks);
+      const blockData = {
+        id: newBlockId,
+        authorId: currentUser,
+        documentId: docID,
+        version: 1,
+        epoch: Date.now(),
+        cipherText: encrypted.cipherText,
+        iv: encrypted.iv,
+        prevHash: prevHash,
+        content: "",
+        status: "saved",
+        editorName: null
+      };
 
-    socket.emit("block:create", {
-      documentId: docID,
-      block: newBlock,
-    });
+      const hash = await BlockCryptoModule.calculateBlockHash(blockData, rawDrk);
+      const newBlock = { ...blockData, hash };
+
+      const updatedBlocks = [...blocks];
+      updatedBlocks.splice(index + 1, 0, newBlock);
+      
+      setBlocks(updatedBlocks);
+      addToHistory(updatedBlocks);
+      
+      socket.emit("block:create", { documentId: docID, block: newBlock });
+      setSavingStatus('saved');
+    } catch (error) {
+      console.error("Lỗi tạo block:", error);
+    }
   };
 
   // Xóa block
@@ -224,16 +276,20 @@ const DocumentEditor = ({ onLogout, socket }) => {
 
   // Hàm Undo
   const handleUndo  = () => {
-    if (indexRef.current <= 0) return;
-    indexRef.current -= 1;
-    setBlocks(historyRef.current[indexRef.current]);
+    if (currentIndex > 0) {
+      const prevStep = currentIndex - 1;
+      setCurrentIndex(prevStep);
+      setBlocks(JSON.parse(JSON.stringify(history[prevStep])));
+    }
   };
 
   // Hàm Redo
  const handleRedo = () => {
-    if (indexRef.current >= historyRef.current.length - 1) return;
-    indexRef.current += 1;
-    setBlocks(historyRef.current[indexRef.current]);
+    if (currentIndex < history.length - 1) {
+      const nextStep = currentIndex + 1;
+      setCurrentIndex(nextStep);
+      setBlocks(JSON.parse(JSON.stringify(history[nextStep])));
+    }
   };
 
   const handleBlockFocus = (id) => {
@@ -241,32 +297,44 @@ const DocumentEditor = ({ onLogout, socket }) => {
     socket?.emit('block:lock', { blockId: id });
   };
 
-  const handleNewDocument = () => {
-    setDocumentRootKey(BlockCryptoModule.generateDRK());
+  const handleNewDocument = async () => {
+    const newDrk = BlockCryptoModule.generateDRK();
+    setDrk(newDrk);
+    const genesisId = crypto.randomUUID();
+
+    try {
+    // 2. Mã hóa nội dung trống cho block đầu tiên
+    const encrypted = await BlockCryptoModule.encryptBlock("", newDrk, genesisId);
 
     const genesis = {
-      id: crypto.randomUUID(),
+      id: genesisId,
       content: "",
-      cipherText: "", 
+      cipherText: encrypted.cipherText,
+      iv: encrypted.iv,
       version: 1,
-      prevHash: "GENESIS",
+      prevHash: "GENESIS_BLOCK_HASH",
       status: "saved",
       editorName: null,
     };
-    genesis.hash = BlockCryptoModule.calculateBlockHash(
-      {
-        id: genesis.id,
-        cipherText: genesis.cipherText,
-        version: genesis.version,
-        prevHash: genesis.prevHash,
-      },
-      BlockCryptoModule.generateDRK()
-    );
-      setBlocks([genesis]);
-      setHistory([[genesis]]);
-      setCurrentIndex(0);
-      setDocTitle("Tài liệu không có tiêu đề");
-      setActiveBlockId(genesis.id);
+
+    // 3. Tính toán hash (BlockCryptoModule.calculateBlockHash trả về chuỗi Base64 
+    // nhờ hàm encodeBuffer bên trong nó)
+    const blockHash = await BlockCryptoModule.calculateBlockHash(genesis, newDrk);
+    
+    // Gán hash vào block (đảm bảo đây là string)
+    genesis.hash = blockHash;
+
+    // 4. Khởi tạo State và History
+    setBlocks([genesis]);
+    setHistory([JSON.parse(JSON.stringify([genesis]))]);
+    setCurrentIndex(0);
+    setDocTitle("Tài liệu không có tiêu đề");
+    setActiveBlockId(genesis.id);
+
+    console.log("Đã khởi tạo tài liệu mới với Genesis Block.");
+  } catch (error) {
+    console.error("Lỗi khi tạo tài liệu mới:", error);
+  }
   };
 
   // Hàm đảo ngược trạng thái cho B, I, U, S
