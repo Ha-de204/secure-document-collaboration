@@ -14,32 +14,38 @@ var usersRouter = require('./routes/users.js');
 var blockRouter = require('./routes/block');
 var documentRouter = require('./routes/document');
 var docKeyRouter = require('./routes/dockey.js')
-
-const { init } = require('./models/Block.js');
 const { initSocket } = require('./sockets/socket.js');
-
 const cors = require('cors');
 
 var app = express();
+const server = http.createServer(app);
 
-app.use(cors({
-  origin: 'http://localhost:3000', // frontend
+const corsOptions = {
+  origin: process.env.URL_FRONTEND || 'http://localhost:3000',
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
-}));
+};
 
-
-// view engine setup
-app.set('views', path.join(__dirname, 'views'));
-app.set('view engine', 'jade');
-
+app.use(cors(corsOptions));
 app.use(logger('dev'));
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 app.use(cookieParser());
 app.use(express.static(path.join(__dirname, 'public')));
+// view engine setup
+app.set('views', path.join(__dirname, 'views'));
+app.set('view engine', 'jade');
 
+const io = new Server(server, {
+  cors: corsOptions,
+  transports: ['websocket', 'polling'],
+  allowEIO3: true,
+
+})
+initSocket(io);
+
+// connect db
 const connectDB = async () => {
     try {
         const conn = await mongoose.connect(process.env.MONGO_URI);
@@ -57,24 +63,6 @@ connectDB();
       console.error("Redis connection error: ", err);
   }
 })()
-const server = http.createServer(app);
-
-const io = new Server(server, {
-  cors: {
-    origin: [
-      process.env.URL_FRONTEND,
-      process.env.URL_BACKEND
-    ],
-    methods: ["GET", "POST"],
-    credentials: true,
-    allowedHeaders: ['Content-Type', 'Authorization'],
-  },
-  transports: ['websocket', 'polling'],
-  allowEIO3: true,
-
-})
-
-initSocket(io);
 
 // route
 app.use('/api', indexRouter);
@@ -96,10 +84,10 @@ app.use(function(err, req, res, next) {
     error: req.app.get('env') === 'development' ? err : {}
   })
 });
-/*
+
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
     console.log(`Server is running on: ${process.env.URL_BACKEND || 'http://localhost:' + PORT}`);
 });
-*/
+
 module.exports = { app, server };

@@ -1,7 +1,7 @@
 const userService = require('../services/UserService');
 
 
-export const getUserByUserName = async (req, res) => {
+const getUserByUserName = async (req, res) => {
         try {
             const { userName } = req.params;
             const user = await userService.findByUserName(userName);
@@ -17,7 +17,7 @@ export const getUserByUserName = async (req, res) => {
         }
     }
 
-export const getUserById = async (req, res) => {
+const getUserById = async (req, res) => {
         try {
             const { userId } = req.params;
             const user = await userService.getById(userId);
@@ -32,6 +32,9 @@ export const getUserById = async (req, res) => {
         }
     }
 
-    
+module.exports = {
+    getUserById,
+    getUserByUserName
+}
 
 
