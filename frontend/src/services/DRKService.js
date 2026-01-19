@@ -1,4 +1,4 @@
-import { getDB } from '../storage/IndexedDBService';
+import { getDB } from '../storage/indexDbService';
 
 const DocumentKeyService = {
 

@@ -1,4 +1,4 @@
-import { getDB } from '../db';
+import { getDB } from '../storage/indexDbService';
 
 export const getCurrentUserId = async () => {
   const db = await getDB();

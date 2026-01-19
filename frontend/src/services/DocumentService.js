@@ -1,5 +1,5 @@
 import { getDB } from '../storage/indexDbService';
-import { createClientDocument } from '../../models/Document';
+import { createClientDocument } from '../models/DocumentModel';
 import { getCurrentUserId, canWrite } from '../helps/PermissionsHelper';
 
 export const searchDocumentClient = async ({ keyword = null }) => {
@@ -142,3 +142,6 @@ export const revokePrivilegesLocal = async (ownerId, userId, documentId) => {
     await db.put('documents', document);
     return { status: true, document };
 };
+export{
+    
+}
