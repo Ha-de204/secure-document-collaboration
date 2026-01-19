@@ -1,6 +1,6 @@
 export const createClientDocument = (data) => {
   return {
-    localDocId: data.localDocId || crypto.randomUUID(), 
+    localDocId: crypto.randomUUID() || crypto.randomUUID(), 
     
     serverId: data._id || null, // Lưu _id của MongoDB sau khi sync
     ownerId: data.ownerId,

@@ -122,7 +122,8 @@ const login = async (req, res) => {
         })
         return res.status(HTTP_STATUS.OK).json({
             status: true,
-            data: accessToken
+            data: accessToken,
+            user: user
 
         })
     }catch(err){

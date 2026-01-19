@@ -58,11 +58,12 @@ const Auth = ({ onAuthSuccess }) => {
           formData.userName,
           formData.password
         );
-
+        
         // Lưu Token và Username (để hiển thị)
         const token = result.data;
+        const currentUser = result.user;
         localStorage.setItem('accessToken', token);
-        localStorage.setItem('currentUser', formData.userName);
+        localStorage.setItem('currentUser', currentUser);
         onAuthSuccess({ token, userName: formData.userName});
       } else {
         alert('Đăng ký thành công!');

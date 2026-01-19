@@ -68,7 +68,7 @@ export async function initIdentity(userName, password) {
 }
 
 export async function unlockIdentity(userName, password) {
-  const record = await getMyKey(userName);
+  const record = await getMyKey();
   if (!record) throw new Error("Identity not found");
 
   const masterKey = await deriveMasterKey(password, userName);
