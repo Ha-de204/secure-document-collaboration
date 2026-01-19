@@ -1,5 +1,5 @@
 import { getDB } from '../storage/indexDbService';
-import { createClientBlock } from '../../models/Document';
+import { createClientBlock } from '../models/BlockModel';
 
 export const getBlocksLocal = async ( blockId, versions = []) => {
   const db = await getDB();
