@@ -961,6 +961,7 @@ ul[class^="bullet-variant"] > li::before {
 .block-wrapper {
     margin-bottom: 2px;
     position: relative;
+    transition: all 0.2s ease;
 }
 
 .block-content {
@@ -974,9 +975,53 @@ ul[class^="bullet-variant"] > li::before {
     outline: 1px solid var(--primary-blue);
 }
 
-.block-locked {
-    background: #f8f9fa;
+.block-content.block-locked {
+    border: 2px solid #e74c3c !important; /* Viền đỏ nổi bật */
+    background-color: #fdf2f2 !important;
+    box-shadow: 0 0 15px rgba(231, 76, 60, 0.2);
+    cursor: not-allowed;
+    user-select: none;
     opacity: 0.8;
+}
+
+.block-locked .block-contenteditable {
+    opacity: 0.5;
+    pointer-events: none; 
+    filter: blur(0.5px);
+}
+
+block-locked::after {
+  content: "🔒 ĐANG BỊ KHÓA BỞI NGƯỜI KHÁC";
+  position: absolute;
+  top: -12px;
+  right: 10px;
+  background: #e74c3c;
+  color: white;
+  font-size: 10px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-weight: bold;
+}
+
+.lock-badge {
+    position: absolute;
+    top: -10px;
+    left: 10px;
+    background: #64748b;
+    color: white;
+    font-size: 12px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    z-index: 10;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    animation: fadeIn 0.3s ease;
+}
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(5px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 .block-textarea {

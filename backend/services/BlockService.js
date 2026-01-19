@@ -1,11 +1,13 @@
 const Block = require('../models/Block');
+const Document = require('../models/Document');
 const { redis } = require('../config/redis');
 const Joi = require('joi');
 const {canAccess} = require('../helpers/DocPermissionHelper')
 
 const accessBlock = async ( blockId, userId, ttlSeconds ) => {
 
-  const block = await Block.find({blockId})
+  const block = await Block.findOne({blockId})
+                           .sort({ version: -1 }) 
                            .populate('documentId', 'ownerId shareWith')
                            .lean();
   
@@ -48,7 +50,8 @@ const accessBlock = async ( blockId, userId, ttlSeconds ) => {
 
 const removeBlockAccess = async (blockId, userId) => {
   const lockKey = `block:${blockId}`;
-  const block = await Block.find({blockId})
+  const block = await Block.findOne({blockId})
+                                  .sort({ version: -1 })
                                   .populate('documentId', 'ownerId')
                                   .lean()
   if(!block){
@@ -85,25 +88,25 @@ const removeBlockAccess = async (blockId, userId) => {
   }
 }
 
-const getLastestBlockVersion = async (blockId, userId) => {
-  const blocks = await Block.findOne({blockId})
+const getLatestBlockVersion = async (blockId, userId) => {
+  const block = await Block.findOne({blockId})
                             .populate('documentId', 'ownerId shareWith')
                             .sort({ version: -1 })
                             .lean();
-  if(blocks.length === 0){
+  if(!block){
     return {
       status: false,
       error: 'BLOCK_NOT_FOUND'
     }
   }
-  if(!canAccess(blocks[0].documentId,userId,'read')) 
+  if(!canAccess(block.documentId,userId,'read')) 
     return{
       status: false,
       error: 'FORBIDDEN_ACCESS'
     }
   return {
     status: true,
-    data: blocks[0]
+    data: block
   }
 }
 const getBlocks = async (
@@ -165,7 +168,26 @@ const createBlockVersion = async (userId,{
     }
   }
 
-  const block = new Block({
+  // 1. Tìm bản ghi mới nhất của Block này trong DB
+  const latestBlock = await Block.findOne({ blockId }).sort({ version: -1 });
+
+  if (latestBlock) {
+    // 2. KIỂM TRA TÍNH TOÀN VẸN (HASH CHAIN)
+    // prevHash của Client gửi lên PHẢI trùng với hash hiện tại trong DB
+    if (latestBlock.hash !== prevHash) {
+      return {
+        status: false,
+        error: 'INTEGRITY_VIOLATION', // Có dấu hiệu hack hoặc xung đột dữ liệu
+        lastValidHash: latestBlock.hash
+      };
+    }
+    // 3. Kiểm tra version
+    if (version <= latestBlock.version) {
+       return { status: false, error: 'OLD_VERSION' };
+    }
+  }
+
+  const newBlock = await Block.create({
     blockId,
     documentId,
     index,
@@ -179,14 +201,14 @@ const createBlockVersion = async (userId,{
   await block.save();
   return{
     status: true,
-    data: block
+    data: newBlock
   }
 }
 
 module.exports = {
   accessBlock,
   removeBlockAccess,
-  getLastestBlockVersion,
+  getLatestBlockVersion,
   getBlocks,
   createBlockVersion
 };

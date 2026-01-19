@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 
-const EditorBlock = ({ block, onFocus, isFocused, fontFamily, onChange, onEnter, onDelete }) => {
+const EditorBlock = ({ block, onFocus, isFocused, fontFamily, onChange, onEnter, onDelete, onBlur }) => {
   const ref = useRef(null);
   const isResizing = useRef(false);
   const startX = useRef(0);
@@ -11,21 +11,26 @@ const EditorBlock = ({ block, onFocus, isFocused, fontFamily, onChange, onEnter,
   const isEditing = block.status === 'editing';
   const isError = block.status === 'error';
 
-   useEffect(() => {
-    if (ref.current && ref.current.innerHTML !== block.content) {
-      ref.current.innerHTML = block.content;
+  useEffect(() => {
+    if (ref.current) {
+      if (ref.current && ref.current.innerHTML !== block.content) {
+        console.log("Syncing content for block:", block.id);
+        ref.current.innerHTML = block.content;
+      }
     }
-  }, [block.id, block.content]);
+  }, [block.content]);
 
   useEffect(() => {
   if (isFocused && ref.current) {
     ref.current.focus();
     const selection = window.getSelection();
-    const range = document.createRange();
-    range.selectNodeContents(ref.current);
-    range.collapse(false);
-    selection.removeAllRanges();
-    selection.addRange(range);
+    if (selection) {
+      const range = document.createRange();
+      range.selectNodeContents(ref.current);
+      range.collapse(false);
+      selection.removeAllRanges();
+      selection.addRange(range);
+    }
   }
 }, [isFocused]);
 
@@ -181,6 +186,12 @@ const EditorBlock = ({ block, onFocus, isFocused, fontFamily, onChange, onEnter,
 
   return (
     <div className="block-wrapper">
+      {isLocked && (
+        <div className="lock-badge">
+          <span role="img" aria-label="lock">🔒</span> 
+          {block.editorName || "Ai đó"} đang chỉnh sửa...
+        </div>
+      )}
       <div className={`block-content ${isEditing ? 'block-editing' : ''} ${isLocked ? 'block-locked' : ''} ${isError ? 'block-error' : ''}`}>
         <div
             ref={ref}
@@ -198,6 +209,7 @@ const EditorBlock = ({ block, onFocus, isFocused, fontFamily, onChange, onEnter,
               wordBreak: 'break-word'
             }}
             onFocus={() => !isLocked && onFocus(block.id)}
+            onBlur={onBlur}
             onInput={handleInput}
             onClick={handleBlockClick}
             onKeyDown={handleKeyDown}
@@ -208,7 +220,7 @@ const EditorBlock = ({ block, onFocus, isFocused, fontFamily, onChange, onEnter,
         
         {!isLocked && (
           <div style={{ fontSize: '9px', color: '#94a3b8', textAlign: 'right', marginTop: '4px', fontFamily: 'monospace' }}>
-            v.{block?.version || 1} | Hash: {block?.lastHash?.substring(0, 8) || "00000000"}...
+            v.{block?.version} | Hash: {block?.hash?.substring(0, 8)}...
           </div>
         )}
       </div>

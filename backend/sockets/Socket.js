@@ -1,5 +1,5 @@
 const authSocket = require('../middlewares/AuthSocket')
-const documentSocket = require('../sockets/DocumentSocket')
+const { documentSocket } = require('../sockets/DocumentSocket');
 const blockSocket = require('../sockets/BlockSocket')
 
 const onlineUserIds = {}
@@ -16,6 +16,9 @@ initSocket = (io) => {
 
         documentSocket(io, socket, onlineUserNames);
         blockSocket(io, socket, onlineUserNames);
+
+        console.log('User connected:', socket.id);
+
         socket.on('disconnect', () => {
             console.log('user disconnected: ', socket.user.userId, socket.user.userName);
             //manager
