@@ -94,6 +94,7 @@ const updateBlockDto = Joi.object({
   cipherText: Joi.string().required(),
   prevHash: Joi.string().required(),
   hash: Joi.string().required(),
+  epoch: Joi.number().required(),
 });
 
 const createBlockVersion = async (req, res) => {
