@@ -146,6 +146,7 @@ const createBlockVersion = async (userId,{
   documentId,
   index,
   version,
+  epoch,
   cipherText,
   prevHash,
   hash
@@ -169,6 +170,7 @@ const createBlockVersion = async (userId,{
     documentId,
     index,
     version,
+    epoch,
     cipherText,
     prevHash,
     hash,

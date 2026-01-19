@@ -15,4 +15,4 @@ const Invite = new mongoose.Schema({
     signature: { type: String, required: true }
 })
  
-module.exports = mongoose.model('Invite', Document);
+module.exports = mongoose.model('Invite', Invite);
