@@ -29,9 +29,9 @@ const BlockCryptoModule = {
   },
 
   /**
-   * Mã hóa Block
-   * Trả về: { cipherText (base64), iv (base64) }
-   */
+  Mã hóa Block
+  Trả về: { cipherText (base64), iv (base64) }
+  */
   async encryptBlock(plaintext, drk, blockId) {
     const aesKey = await this._deriveKey(
       drk, BLOCK_KEY_LABEL, blockId, 
@@ -73,67 +73,52 @@ const BlockCryptoModule = {
     }
   },
 
-  /**
-   * Tính toán Hash Chain (Integrity)
-   * Kết hợp dữ liệu block hiện tại với hash của block trước đó
-   */
   async calculateBlockHash(blockData, drk) {
      const {
       blockId,
+      authorId,
+      documentId,
       index,
       version,
+      epoch,
       cipherText,
-      prevHash = "GENESIS_BLOCK_HASH"
+      prevHash = "GENESIS_BLOCK_HASH",
     } = blockData;
     
-    // Dẫn xuất một khóa chuyên biệt cho việc tính Integrity (tách biệt với khóa mã hóa)
     const hmacKey = await this._deriveKey(
       drk, INTEGRITY_KEY_LABEL, blockId, 
       ["sign"], { name: "HMAC", hash: "SHA-256" }
     );
 
-    // Message bao gồm: Block ID + Version + Dữ liệu đã mã hóa + Mối liên kết tới block trước
-    const message = stringToBuffer(`${blockId}|${index}|${version}|${cipherText}|${prevHash}`);
+    const message = stringToBuffer(`${blockId}|${authorId}|${documentId}|${index}|${version}|${epoch}|${cipherText}|${prevHash}`);
     const signature = await subtle.sign({ name: "HMAC" }, hmacKey, message);
 
     return encodeBuffer(signature);
   },
 
-  /**
-   *  Xác minh toàn bộ chuỗi
-   */
   async verifyChain(blocks, drk) {
-    // Gom block theo blockId
-    const blockGroups = {};
-    for (const block of blocks) {
-      if (!blockGroups[block.blockId]) {
-        blockGroups[block.blockId] = [];
+    if (!blocks || blocks.length === 0) return { valid: true };
+
+    const sortedBlocks = [...blocks].sort((a, b) => a.index - b.index);
+
+    let lastHash = "GENESIS_BLOCK_HASH";
+
+    for (const block of sortedBlocks) {
+      const expectedHash = await this.calculateBlockHash(
+        { ...block, prevHash: lastHash },
+        drk
+      );
+
+      if (block.hash !== expectedHash) {
+        return {
+          valid: false,
+          corruptBlockId: block.blockId,
+          corruptIndex: block.index,
+          corruptVersion: block.version,
+          corruptEpoch: block.epoch
+        };
       }
-      blockGroups[block.blockId].push(block);
-    }
-
-     // Kiểm tra từng block
-    for (const blockId in blockGroups) {
-      const versions = blockGroups[blockId]
-        .sort((a, b) => a.version - b.version);
-
-      let lastHash = "GENESIS_BLOCK_HASH";
-
-      for (const block of versions) {
-        const expectedHash = await this.calculateBlockHash(
-          { ...block, prevHash: lastHash },
-          drk
-        );
-
-        if (block.hash !== expectedHash) {
-          return {
-            valid: false,
-            corruptBlockId: block.blockId,
-            corruptVersion: block.version
-          };
-        }
-         lastHash = block.hash;
-      }
+      lastHash = block.hash;
     }
     return { valid: true };
   }
