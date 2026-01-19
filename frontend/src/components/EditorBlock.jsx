@@ -13,15 +13,17 @@ const EditorBlock = ({ block, onFocus, isFocused, fontFamily, onChange, onEnter,
 
   useEffect(() => {
     if (ref.current) {
-      if (ref.current && ref.current.innerHTML !== block.content) {
-        console.log("Syncing content for block:", block.id);
+      if (!ref.current) return;
+      if (document.activeElement === ref.current) return;
+
+      if (ref.current.innerHTML !== block.content) {
         ref.current.innerHTML = block.content;
       }
     }
   }, [block.content]);
 
   useEffect(() => {
-  if (isFocused && ref.current) {
+  if (isFocused && ref.current && isLocked) {
     ref.current.focus();
     const selection = window.getSelection();
     if (selection) {
@@ -32,9 +34,10 @@ const EditorBlock = ({ block, onFocus, isFocused, fontFamily, onChange, onEnter,
       selection.addRange(range);
     }
   }
-}, [isFocused]);
+}, [isFocused, isLocked]);
 
   const handleInput = () => {
+    if (isLocked) return;
     onChange(block.id, ref.current.innerHTML);
   };
 

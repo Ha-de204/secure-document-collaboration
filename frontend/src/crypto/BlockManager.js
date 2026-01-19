@@ -1,4 +1,3 @@
-const subtle = window.crypto.subtle;
 import {
   stringToBuffer,
   bufferToString,
@@ -6,6 +5,7 @@ import {
   decodeBuffer,
   getRandomBytes
 } from "./lib";
+const subtle = window.crypto.subtle;
 
 const BLOCK_KEY_LABEL = "BLOCK_ENCRYPTION_KEY";
 const INTEGRITY_KEY_LABEL = "BLOCK_INTEGRITY_KEY";

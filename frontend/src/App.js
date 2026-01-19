@@ -58,34 +58,6 @@ function App() {
     }
   }, [token]);
 
-  // 3. Hàm tạo Document thật để lấy ID hợp lệ (Dùng để test)
-  const createTestDoc = async () => {
-  try {
-    const baseUrl = process.env.REACT_APP_API_URL;
-    const res = await fetch(`${baseUrl}/documents`, {
-      method: 'POST',
-      headers: { 
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
-      },
-      body: JSON.stringify({ title: "Tài liệu Test Cộng Tác", publicMetadata: false })
-    });
-
-    const responseData = await res.json();
-    console.log("DỮ LIỆU PHẢN HỒI TỪ SERVER:", responseData);
-
-    // Sửa điều kiện kiểm tra ở đây: lấy _id từ responseData.data
-    if (responseData.status && responseData.data && responseData.data._id) {
-      alert("Đã tạo Document thành công! Hệ thống sẽ chuyển bạn tới đó.");
-      window.location.href = `/editor/${responseData.data._id}`;
-    } else {
-      alert("Lỗi: " + (responseData.message || "Không lấy được ID từ server"));
-    }
-  } catch (err) {
-    alert("Lỗi khi tạo document: " + err.message);
-  }
-};
-
   const handleLogout = () => {
     localStorage.removeItem('accessToken');
     setToken(null);
@@ -96,27 +68,6 @@ function App() {
   return (
    <BrowserRouter>
       <div className="App">
-       {token && (
-          <button 
-            onClick={createTestDoc}
-            style={{
-              position: 'fixed', 
-              bottom: '20px', 
-              right: '20px', 
-              zIndex: 9999, 
-              padding: '12px 20px', 
-              background: '#f1c40f',
-              border: 'none',
-              borderRadius: '8px',
-              fontWeight: 'bold',
-              cursor: 'pointer',
-              boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
-            }}
-          >
-            ➕ Tạo Document Thật để Test
-          </button>
-        )}
-
         <Routes>
           {!token ? (
             // Route cho người chưa đăng nhập

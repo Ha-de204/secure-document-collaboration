@@ -1,5 +1,6 @@
 /* global html2pdf */
 import React, { useState } from 'react';
+
 import { 
   ShieldCheck, Share2, ChevronDown,
   CloudCheck, Undo2, Redo2, SpellCheck, PaintRoller, Plus, Minus,
@@ -54,10 +55,10 @@ export const Header = ({ title, onTitleChange, savingStatus, onNewDocument, onUn
   const [copyStatus, setCopyStatus] = useState("Sao chép đường liên kết");
 
   // Hàm xử lý khi nhấn "Mới"
-  const handleNewDoc = () => {
-    onNewDocument(); 
-    setShowFileMenu(false);
+  const handleNewDoc = async () => {
+    onNewDocument();
   };
+
   const saveSelection = () => {
     const sel = window.getSelection();
     if (sel.getRangeAt && sel.rangeCount) {
