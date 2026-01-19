@@ -3,7 +3,7 @@ const router = express.Router();
 
 const authController = require('../controllers/AuthController');
 const auth = require('../middlewares/AuthMiddleware');
-
+const userController = require('../controllers/UserController')
 /*
 const registerDto = Joi.object({
     userName: Joi.string().trim().min(3).max(100).required(),
@@ -36,5 +36,6 @@ router.put('/change-password',auth,authController.changePassword);
 router.put('/metadata',auth,authController.updateMetadata);
 //const {isPublic} = req.params;
 router.put('/metadata/public/:isPublic',auth,authController.publicMetadata);
-
+router.get('/:id',userController.getUserById);
+router.get('/:userName',userController.getUserByUserName)
 module.exports = router

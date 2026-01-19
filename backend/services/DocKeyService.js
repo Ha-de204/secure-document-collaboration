@@ -15,7 +15,7 @@ const createDocKey = async (ownerId, {
             error: 'DOCUMENT_NOT_FOUND'
         }
     }
-    if(!ownerId || ownerId != document.ownerId){
+    if(!ownerId || ownerId != document.ownerId.toString()){
         return{
             status: false,
             error: 'FORBIDDEN_ACCESS'
@@ -31,7 +31,7 @@ const createDocKey = async (ownerId, {
     if (existed) {
         return{
             status: false,
-            return: 'ALREADY_EXISTS'
+            error: 'ALREADY_EXISTS'
         }
     }
 
@@ -45,13 +45,13 @@ const createDocKey = async (ownerId, {
 
     return {
         status: true,
-        data: dockey
+        data: docKey
     }
 }
 
 const getDocKey = async ({ documentId, userId }) => {
 
-    const document = await documentService.findById(documentId);
+    const document = await documentService.getDocumentById(documentId);
     if(!document){
         return{
             status: false,
@@ -61,15 +61,29 @@ const getDocKey = async ({ documentId, userId }) => {
     const docKeys = await DocKey.find({
         documentId,
         userId
-    }).sort({ epoch: 1 })
+    }).sort({ epoch: -1 })
 
     return {
         status: true,
         data: docKeys
     }
 }
-
+const getLastestDockey = async ({ documentId, userId }) => {
+    const result = await getDocKey({documentId,userId});
+    if(!result.status) return result
+    if (!result.data || result.data.length === 0) {
+        return {
+            status: false,
+            error: 'DOC_KEY_NOT_FOUND'
+        }
+    }
+    return{
+        status: true,
+        data: result.data[0]
+    }
+}
 module.exports = {
+    getLastestDockey,
     createDocKey,
     getDocKey
 }
