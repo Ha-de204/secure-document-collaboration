@@ -65,41 +65,13 @@ const DocumentEditor = ({ onLogout, socket }) => {
   useEffect(() => {
     if (!docID) return;
 
-    // 1. Khởi tạo DRK (Trong thực tế nên fetch từ server)
-    const newDrk = BlockCryptoModule.generateDRK();
-    setDrk(newDrk);
-
-    // 2. Tạo block đầu tiên có mã hóa
-    const initDoc = async () => {
-      const firstBlockId = crypto.randomUUID();
-      const encrypted = await BlockCryptoModule.encryptBlock("", newDrk, firstBlockId);
-      
-      const firstBlock = {
-        id: firstBlockId,
-        content: "",
-        cipherText: encrypted.cipherText,
-        iv: encrypted.iv,
-        version: 1,
-        prevHash: "GENESIS_BLOCK_HASH",
-        status: "saved",
-        editorName: null,
-      };
-      
-      const hash = await BlockCryptoModule.calculateBlockHash(firstBlock, newDrk);
-      firstBlock.hash = hash;
-
-      const initialBlocks = [firstBlock];
-      setBlocks(initialBlocks);
-      setHistory([JSON.parse(JSON.stringify(initialBlocks))]);
-      setCurrentIndex(0);
+    const initEmptyDoc = async () => {
+      const newDrk = BlockCryptoModule.generateDRK();
+      setDrk(newDrk);
     };
 
-    initDoc();
+    initEmptyDoc();
     socket.emit("document:join", { documentId: docID });
-
-    return () => {
-      socket.emit("document:leave", { documentId: docID });
-    };
   }, [docID]);
 
   // --- SOCKET LISTENERS ---
@@ -177,49 +149,78 @@ const DocumentEditor = ({ onLogout, socket }) => {
     }, 1000);
   }; 
 
-  // hàm thêm block mới
   const handleAddBlock = async (index) => {
-    if (!drk) return;
-    const rawDrk = drk instanceof Uint8Array ? drk : new Uint8Array(Object.values(drk));
+  if (!drk || !currentUser) {
+    alert("Thông tin người dùng hoặc khóa chưa sẵn sàng.");
+    return;
+  }
+
+  try {
+    setSavingStatus('saving');
     
-    const newBlockId = crypto.randomUUID();
-    const prevBlock = blocks[index];
-    const prevHash = prevBlock ? (prevBlock.hash || "GENESIS_BLOCK_HASH") : "GENESIS_BLOCK_HASH";
-
-    try {
-      setSavingStatus('saving');
-      const encrypted = await BlockCryptoModule.encryptBlock("", rawDrk, newBlockId);
-
-      const blockData = {
-        id: newBlockId,
-        authorId: currentUser,
-        documentId: docID,
-        version: 1,
-        epoch: Date.now(),
-        cipherText: encrypted.cipherText,
-        iv: encrypted.iv,
-        prevHash: prevHash,
-        content: "",
-        status: "saved",
-        editorName: null
-      };
-
-      const hash = await BlockCryptoModule.calculateBlockHash(blockData, rawDrk);
-      const newBlock = { ...blockData, hash };
-
-      const updatedBlocks = [...blocks];
-      updatedBlocks.splice(index + 1, 0, newBlock);
-      
-      setBlocks(updatedBlocks);
-      addToHistory(updatedBlocks);
-      
-      socket.emit("block:create", { documentId: docID, block: newBlock });
-      setSavingStatus('saved');
-    } catch (error) {
-      console.error("Lỗi tạo block:", error);
+    // KIỂM TRA ĐỊNH DẠNG: docID phải là 24 ký tự Hex (Ví dụ: 65b2f...)
+    // Nếu docID lấy từ URL đang là UUID, bạn cần lấy đúng ID từ Database
+    const isValidObjectId = /^[0-9a-fA-F]{24}$/.test(docID);
+    if (!isValidObjectId) {
+       throw new Error("docID không đúng định dạng MongoDB ObjectId. Hiện tại: " + docID);
     }
-  };
 
+    const newUUID = crypto.randomUUID();
+    
+    // VỚI KHỐI MỚI (Lần đầu tạo blockId này):
+    const initialPrevHash = "0"; // Khởi tạo chuỗi hash đầu tiên
+
+    const encrypted = await BlockCryptoModule.encryptBlock("", drk, newUUID);
+    const combinedCipherText = `${encrypted.iv}:${encrypted.cipherText}`;
+
+    // Tính hash cho Version 1
+    const hashValue = await BlockCryptoModule.calculateBlockHash({
+      blockId: newUUID,
+      cipherText: combinedCipherText,
+      prevHash: initialPrevHash,
+      version: 1
+    }, drk);
+
+    // CHỈ GỬI 8 TRƯỜNG MÀ JOI YÊU CẦU
+    const finalPayload = {
+      blockId: String(newUUID),
+      documentId: String(docID),
+      index: Number(index),
+      version: 1,
+      cipherText: String(combinedCipherText),
+      prevHash: String(initialPrevHash),
+      hash: String(hashValue),
+      epoch: Number(Date.now())
+    };
+
+    const response = await fetch(`${process.env.REACT_APP_API_URL}/blocks/${docID}`, {
+      method: 'POST',
+      headers: { 
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
+      },
+      body: JSON.stringify(finalPayload)
+    });
+
+    const result = await response.json();
+
+    if (!response.ok || result.status === false) {
+      console.error("Chi tiết lỗi:", result);
+      throw new Error(result.message || "Server trả về status: false (Lỗi 500)");
+    }
+
+    setBlocks(prev => {
+      const updated = [...prev];
+      updated.splice(index, 0, { ...finalPayload, id: newUUID, content: "" });
+      return updated;
+    });
+    setSavingStatus('saved');
+    
+  } catch (error) {
+    setSavingStatus('error');
+    alert(error.message);
+  }
+};
   // Xóa block
   const handleDeleteBlock = (blockId) => {
     setBlocks(prev => prev.filter(b => b.id !== blockId));
@@ -298,43 +299,37 @@ const DocumentEditor = ({ onLogout, socket }) => {
   };
 
   const handleNewDocument = async () => {
-    const newDrk = BlockCryptoModule.generateDRK();
-    setDrk(newDrk);
-    const genesisId = crypto.randomUUID();
-
     try {
-    // 2. Mã hóa nội dung trống cho block đầu tiên
-    const encrypted = await BlockCryptoModule.encryptBlock("", newDrk, genesisId);
+      setSavingStatus('saving');
 
-    const genesis = {
-      id: genesisId,
-      content: "",
-      cipherText: encrypted.cipherText,
-      iv: encrypted.iv,
-      version: 1,
-      prevHash: "GENESIS_BLOCK_HASH",
-      status: "saved",
-      editorName: null,
-    };
+      // 1. Sinh khóa DRK mới cho tài liệu này
+      const newDrk = BlockCryptoModule.generateDRK(); 
+      setDrk(newDrk); // Lưu vào state để handleAddBlock có thể sử dụng
 
-    // 3. Tính toán hash (BlockCryptoModule.calculateBlockHash trả về chuỗi Base64 
-    // nhờ hàm encodeBuffer bên trong nó)
-    const blockHash = await BlockCryptoModule.calculateBlockHash(genesis, newDrk);
-    
-    // Gán hash vào block (đảm bảo đây là string)
-    genesis.hash = blockHash;
+      // 2. Reset danh sách blocks về mảng rỗng theo yêu cầu của bạn
+      setBlocks([]); 
 
-    // 4. Khởi tạo State và History
-    setBlocks([genesis]);
-    setHistory([JSON.parse(JSON.stringify([genesis]))]);
-    setCurrentIndex(0);
-    setDocTitle("Tài liệu không có tiêu đề");
-    setActiveBlockId(genesis.id);
+      // 3. Reset lịch sử Undo/Redo về trạng thái trống ban đầu
+      setHistory([[]]); 
+      setCurrentIndex(0);
 
-    console.log("Đã khởi tạo tài liệu mới với Genesis Block.");
-  } catch (error) {
-    console.error("Lỗi khi tạo tài liệu mới:", error);
-  }
+      // 4. Cập nhật các thông tin hiển thị
+      setDocTitle("Tài liệu mới không có tiêu đề");
+      setActiveBlockId(null);
+
+      // 5. Lưu DB
+      const res = await fetch(`${process.env.REACT_APP_API_URL}/documents`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: "Tài liệu mới", owner: currentUser })
+      });
+
+      console.log("Đã khởi tạo môi trường tài liệu mới. Hãy nhấn 'Add New Block' để bắt đầu.");
+      setSavingStatus('saved');
+    } catch (error) {
+      console.error("Lỗi khi khởi tạo tài liệu mới:", error);
+      setSavingStatus('error');
+    }
   };
 
   // Hàm đảo ngược trạng thái cho B, I, U, S
@@ -356,8 +351,8 @@ const DocumentEditor = ({ onLogout, socket }) => {
         onNewDocument={handleNewDocument}
         onUndo={handleUndo}
         onRedo={handleRedo} 
-        canUndo={indexRef.current > 0}
-        canRedo={indexRef.current < historyRef.current.length - 1}
+        canUndo={currentIndex > 0}
+        canRedo={currentIndex < history.length - 1}
         zoom={zoom}
         onZoomChange={setZoom}
         fontFamily={fontFamily}
