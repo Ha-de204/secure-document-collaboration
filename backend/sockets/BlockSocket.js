@@ -6,19 +6,36 @@ const { canAccess: canAccessDocument } = require('../helpers/DocPermissionHelper
 
 const blockSocket = (io, socket, onlineUserNames) => {
        
+    socket.on('document:request_access', async ({ documentId, blockId }) => {
+    try {
+        const  result = await blockService.accessBlock(blockId, socket.user.userId, process.env.BLOCK_TTL_MINUTES)
+        socket.emit('block:locked: ', {blockId, result});
+    } catch (err) {
+        console.error('block:error', err);
+        }
+    });
+
+    socket.on('document:remove_access', async ({ documentId, blockId }) => {
+    try {
+        const  result = await blockService.removeBlockAccess(blockId,socket.user.userId)
+        socket.emit('block:remove-locked: ',{ blockId ,result} );
+    } catch (err) {
+        console.error('block:error', err);
+        }
+    });
     socket.on('block:editing', ({ documentId, blockId, cipherText }) => {
         if (!socket.rooms.has(documentId)) return;
 
         socket.to(documentId).emit('block:editing', {
         blockId,
         cipherText,
-        by: socket.user.userId
+        userId: socket.user.userId
         });
     });
 
     socket.on('block:commit', async (payload) => {
         try {
-        const { documentId } = payload;
+        const { blockId, cipherText, documentId } = payload;
         if (!socket.rooms.has(documentId)) return;
 
         const document = await Document.findById(documentId).lean();
@@ -32,11 +49,10 @@ const blockSocket = (io, socket, onlineUserNames) => {
         if (!canWrite) return;
 
         socket.to(documentId).emit('block:committed', {
-            blockId: result.data.blockId,
-            version: result.data.version,
-            hash: result.data.hash,
-            epoch: result.data.epoch,
-            isDeleted: false
+            blockId,
+            cipherText,
+            userId: socket.user.userId
+            
         });
 
         } catch (err) {

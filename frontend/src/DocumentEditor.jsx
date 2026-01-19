@@ -106,56 +106,94 @@ const DocumentEditor = ({ onLogout, socket }) => {
   useEffect(() => {
     if (!socket || !drk) return;
 
-    socket.on("block:locked", ({ blockId, userId }) => {
-    setBlocks(prev =>
-      prev.map(b =>
-        b.id === blockId
-          ? {
-            ...b,
-            status: "locked",
-            editorName: userId
-          }
-        : b
-      )
-    );
+    socket.on("block:locked", ({ blockId, result }) => {
+    // setBlocks(prev =>
+    //   prev.map(b =>
+    //     b.id === blockId
+    //       ? {
+    //         ...b,
+    //         status: "locked",
+    //         editorName: userId
+    //       }
+    //     : b
+    //   )
+    // );
+    alert("Bloc nay bi khoa")
   });
 
-  socket.on("block:unlocked", ({ blockId }) => {
-    setBlocks(prev =>
-      prev.map(b =>
-        b.id === blockId
-          ? {
-            ...b,
-            status: "saved",
-            editorName: null
-          }
-        : b
-      )
-    );
+  socket.on("block:remove-locked", ({ blockId, result }) => {
+    // setBlocks(prev =>
+    //   prev.map(b =>
+    //     b.id === blockId
+    //       ? {
+    //         ...b,
+    //         status: "saved",
+    //         editorName: null
+    //       }
+    //     : b
+    //   )
+    // );
+
   });
   
-    socket.on("block:update", payload => {
-      const plain = cryptoRef.current.decryptBlock(payload);
+    socket.on("block:editing", ({
+      blockId,
+      cipherText,
+      userId
+    }) => {
+      try{
+      const plain = cryptoRef.current.decryptBlock(cipherText);
+      // setBlocks(prev =>
+      //   prev.map(b => b.id === payload.blockId ? plain : b)
+      // );
       setBlocks(prev =>
-        prev.map(b => b.id === payload.blockId ? plain : b)
+      prev.map(b =>
+        b.id === blockId 
+          ? {
+            ...b,
+            content: plain,
+            status: "locked",
+            editorName: userId
+            }
+          : b
+        )
       );
+    }catch(err){
+      alert(err)
+    }
     });
 
-    socket.on("block:create", payload => {
-      const plain = cryptoRef.current.decryptBlock(payload);
-      setBlocks(prev => [...prev, plain]);
-    });
+    socket.on("block:committed", async (payload) => {
+      const { blockId, cipherText, by } = payload;
+        
+        try {
+          // Giải mã nội dung mới nhận được
+          const plainText = await cryptoRef.current.decryptBlock(
+            cipherText, 
+            payload.iv, // Đảm bảo backend có gửi iv kèm theo nhé
+            drk, 
+            blockId
+          );
 
-    socket.on("block:delete", ({ blockId }) => {
-      setBlocks(prev => prev.filter(b => b.id !== blockId));
-    });
-
+          setBlocks(prev => prev.map(b => 
+            b.id === blockId 
+              ? { ...b, content: plainText, status: "saved", editorName: null } 
+              : b
+          ));
+        } catch (err) {
+          console.error("Không thể giải mã block vừa commit:", err);
+        }
+      });
+    socket.on("document:error", (message) => {
+      alert(message);
+    })
     return () => {
       socket.off("block:locked");
       socket.off("block:unlocked");
       socket.off("block:update");
       socket.off("block:create");
-      socket.off("block:delete")
+      socket.off("block:delete");
+      socket.off("document:error")
     };
   }, [socket]);
 

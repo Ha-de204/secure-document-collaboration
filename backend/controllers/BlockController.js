@@ -90,6 +90,7 @@ const updateBlockDto = Joi.object({
   documentId: Joi.string().required(),
   index: Joi.number().required(),
   version: Joi.number().required(),
+  epoch: Joi.number().required(),
   cipherText: Joi.string().required(),
   prevHash: Joi.string().required(),
   hash: Joi.string().required(),
