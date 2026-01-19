@@ -24,7 +24,7 @@ initSocket = (io) => {
             const rooms = Array.from(socket.rooms);
             rooms.forEach(documentId => {
                 if (documentId !== socket.id) { 
-                    socket.to(documentId).emit('document:leaved', userId);
+                    socket.to(documentId).emit('document:left', userId);
                     console.log(`User ${userName} tự động rời phòng ${documentId} do F5/Tắt tab/Mất mạng`);
                 }
             });
