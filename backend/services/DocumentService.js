@@ -36,7 +36,7 @@ const searchDocument = async ({ userId, keyword = null }) => {
     };
 };
 
-const findDocumentByIdInternal = async (documentId) => {
+const findDocumentById= async (documentId) => {
     try {
         return await Document.findById(documentId);
     } catch (error) {
@@ -220,5 +220,5 @@ module.exports = {
     revokePrivileges,
     updateDocument,
     deleteDocument,
-    findDocumentByIdInternal
+    findDocumentById
 }

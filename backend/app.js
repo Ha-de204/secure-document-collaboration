@@ -13,6 +13,7 @@ var indexRouter = require('./routes/index');
 var usersRouter = require('./routes/users.js');
 var blockRouter = require('./routes/block');
 var documentRouter = require('./routes/document');
+var docKeyRouter = require('./routes/dockey.js')
 
 const { init } = require('./models/Block.js');
 const { initSocket } = require('./sockets/socket.js');
@@ -28,7 +29,6 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization'],
 }));
 
-app.options('*', cors());
 
 // view engine setup
 app.set('views', path.join(__dirname, 'views'));
@@ -81,6 +81,7 @@ app.use('/api', indexRouter);
 app.use('/users', usersRouter);
 app.use('/blocks', blockRouter);
 app.use('/documents', documentRouter);
+app.use('/doc-keys', docKeyRouter);
 
 
 // catch 404 and forward to error handler
