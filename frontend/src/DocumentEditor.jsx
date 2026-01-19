@@ -4,7 +4,7 @@ import { Header } from './components/Header';
 import { Footer } from './components/Footer';
 import EditorBlock from './components/EditorBlock';
 import './styles/editor.css';
-import { SecurityProvider } from './utils/crypto';
+import { SecurityProvider } from './crypto/crypto';
 import { useParams, useNavigate } from 'react-router-dom';
 
 const DocumentEditor = ({ onLogout, socket }) => {

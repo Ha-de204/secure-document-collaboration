@@ -17,7 +17,9 @@ const passwordOptions = {
 const registerDto = Joi.object({
     userName: Joi.string().trim().min(3).max(100).required(),
     password: passwordComplexity(passwordOptions).required(),
-    metadata: Joi.object().optional()
+    identityKey: Joi.string().required(), // THÊM DÒNG NÀY
+    metadata: Joi.object().optional(),
+    publicMetadata: Joi.boolean().optional() // Thêm nếu frontend có gửi lên
 })
 
 const loginDto = Joi.object({
@@ -33,7 +35,7 @@ const changePassDto = Joi.object({
 
 const register = async (req, res) => {
     try{
-        const { userName, password, metadata } = req.body;
+        const { userName, password, metadata, identityKey, publicMetadata } = req.body;
         const existingUser = await User.findOne({userName});
         if(existingUser){
             return res.status(HTTP_STATUS.CONFLICT).json({
@@ -47,7 +49,9 @@ const register = async (req, res) => {
         await User.create({
             userName,
             password: hashedPass,
-            metadata
+            identityKey,
+            metadata,
+            publicMetadata: publicMetadata || false
         });
 
         return res.status(HTTP_STATUS.CREATED).json({
