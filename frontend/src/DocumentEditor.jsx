@@ -247,7 +247,7 @@ const DocumentEditor = ({ onLogout, socket }) => {
     const genesis = {
       id: crypto.randomUUID(),
       content: "",
-      cipherText: "", // block trống
+      cipherText: "", 
       version: 1,
       prevHash: "GENESIS",
       status: "saved",
