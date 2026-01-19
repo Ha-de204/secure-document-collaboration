@@ -198,7 +198,6 @@ const createBlockVersion = async (userId,{
     hash,
     authorId: userId
   });
-  await block.save();
   return{
     status: true,
     data: newBlock
