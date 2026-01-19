@@ -1,64 +1,8 @@
 import React, { useState } from 'react';
 import { LogIn, UserPlus, Lock, User, Eye, EyeOff } from 'lucide-react';
 import { sha256 } from 'js-sha256';
-import { getDB } from './storage/indexDbService'; 
 
-const bufferToBase64 = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf)));
-const base64ToBuffer = (base64) => Uint8Array.from(atob(base64), c => c.charCodeAt(0));
-
-// 1. Tạo Master Key từ password 
-const deriveMasterKey = async (password, salt) => {
-  const enc = new TextEncoder();
-  const keyMaterial = await window.crypto.subtle.importKey(
-    "raw", enc.encode(password), "PBKDF2", false, ["deriveKey"]
-  );
-  return window.crypto.subtle.deriveKey(
-    {
-      name: "PBKDF2",
-      salt: enc.encode(salt),
-      iterations: 100000,
-      hash: "SHA-256"
-    },
-    keyMaterial,
-    { name: "AES-GCM", length: 256 },
-    false,
-    ["encrypt", "decrypt"]
-  );
-};
-
-// 2. Mã hóa Private Key
-const encryptData = async (masterKey, plainText) => {
-  const enc = new TextEncoder();
-  const iv = window.crypto.getRandomValues(new Uint8Array(12));
-  const encrypted = await window.crypto.subtle.encrypt(
-    { name: "AES-GCM", iv },
-    masterKey,
-    enc.encode(plainText)
-  );
-  return {
-    ciphertext: bufferToBase64(encrypted),
-    iv: bufferToBase64(iv)
-  };
-};
-
-// 3. Giải mã Private Key
-const decryptPrivateKey = async (password, userName, encryptedData) => {
-  try {
-    const masterKey = await deriveMasterKey(password, userName);
-    const ciphertextBuffer = base64ToBuffer(encryptedData.ciphertext);
-    const ivBuffer = base64ToBuffer(encryptedData.iv);
-
-    const decryptedBuffer = await window.crypto.subtle.decrypt(
-      { name: "AES-GCM", iv: ivBuffer },
-      masterKey,
-      ciphertextBuffer
-    );
-
-    return new TextDecoder().decode(decryptedBuffer);
-  } catch (err) {
-    throw new Error("Không thể giải mã khóa bảo mật. Mật khẩu có thể sai hoặc dữ liệu bị lỗi.");
-  }
-};
+import { initIdentity, unlockIdentity } from "./crypto/IdentityManager";
 
 const Auth = ({ onAuthSuccess }) => {
   const [isLogin, setIsLogin] = useState(true);
@@ -66,43 +10,6 @@ const Auth = ({ onAuthSuccess }) => {
   const [formData, setFormData] = useState({ userName: '', password: '' });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  
-  // Hàm sinh cặp khóa và bảo mật bằng Master Key
-  const generateAndStoreKeys = async (userName, password) => {
-    const db = await getDB();
-    
-    // Bước 1: Sinh Identity Key Pair (ECDH P-256)
-    const keyPair = await window.crypto.subtle.generateKey(
-      { name: "ECDH", namedCurve: "P-256" },
-      true, 
-      ["deriveKey"]
-    );
-
-    // Bước 2: Export khóa
-    const pubKeyBuf = await window.crypto.subtle.exportKey("spki", keyPair.publicKey);
-    const privKeyBuf = await window.crypto.subtle.exportKey("pkcs8", keyPair.privateKey);
-    
-    const publicKeyBase64 = bufferToBase64(pubKeyBuf);
-    const privateKeyPlain = bufferToBase64(privKeyBuf);
-
-    // Bước 3: Tạo Master Key từ Password (dùng userName làm Salt)
-    const masterKey = await deriveMasterKey(password, userName);
-
-    // Bước 4: Mã hóa Private Key bằng Master Key
-    const encryptedPrivKey = await encryptData(masterKey, privateKeyPlain);
-
-    // Bước 5: Lưu vào IndexedDB
-    await db.put('identityKey', {
-      id: 'current_user_keys',
-      userName: userName,
-      publicKey: publicKeyBase64,
-      encryptedPrivateKey: encryptedPrivKey.ciphertext,
-      iv: encryptedPrivKey.iv, 
-      createdAt: new Date().toISOString()
-    });
-
-    return publicKeyBase64;
-  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -127,12 +34,11 @@ const Auth = ({ onAuthSuccess }) => {
       };
 
       if (!isLogin) {
-        const identityPublicKey = await generateAndStoreKeys(
+        const identityPublicKey = await initIdentity(
           formData.userName, 
           formData.password
         );
         payload.identityKey = identityPublicKey;
-        payload.publicMetadata = false;
       }
 
       const endpoint = isLogin ? '/users/login' : '/users/register';
@@ -148,18 +54,11 @@ const Auth = ({ onAuthSuccess }) => {
       if (!response.ok) throw new Error(result.message || 'Có lỗi xảy ra');
 
       if (isLogin) {
-        const db = await getDB();
-        const storedKey = await db.get('identityKey', 'current_user_keys');
+        await unlockIdentity(
+          formData.userName,
+          formData.password
+        );
 
-        if (storedKey) {
-          await decryptPrivateKey(
-            formData.password, 
-            formData.userName, 
-            { ciphertext: storedKey.encryptedPrivateKey, iv: storedKey.iv }
-          );
-          console.log("Giải mã Private Key thành công!");
-        }
-        
         // Lưu Token và Username (để hiển thị)
         const token = result.data;
         localStorage.setItem('accessToken', token);

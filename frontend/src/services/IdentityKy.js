@@ -1,8 +1,11 @@
-import { getDB } from '../index';
+import { getDB } from '../storage/indexDbService';
 
 export const saveMyKey = async (identityObj) => {
   const db = await getDB();
-  await db.put('identityKey', identityObj,'self');
+  await db.put('identityKey', {
+    id: 'self',          
+    ...identityObj
+  });
 };
 
 export const getMyKey = async () => {

@@ -1,4 +1,4 @@
-import { getDB } from '../index';
+import { getDB } from '../storage/indexDbService';
 
 export const savePublicKey = async (contactData) => {
   const db = await getDB();

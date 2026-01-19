@@ -11,6 +11,10 @@ const BLOCK_KEY_LABEL = "BLOCK_ENCRYPTION_KEY";
 const INTEGRITY_KEY_LABEL = "BLOCK_INTEGRITY_KEY";
 
 const BlockCryptoModule = {
+  // sinh Document Root Key
+  generateDRK() {
+    return window.crypto.getRandomValues(new Uint8Array(32));
+  },
   
   /**
    * Dẫn xuất khóa con từ Document Root Key (DRK)

@@ -1,4 +1,4 @@
-import { getDB } from '../index';
+import { getDB } from '../storage/indexDbService';
 import { createClientDocument } from '../../models/Document';
 import { getCurrentUserId, canWrite } from '../helps/PermissionsHelper';
 
