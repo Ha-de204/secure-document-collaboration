@@ -53,6 +53,7 @@ export const Header = ({ title, onTitleChange, savingStatus, onNewDocument, onUn
   const [gridSize, setGridSize] = useState({ rows: 0, cols: 0 });
   const [showSharePopup, setShowSharePopup] = useState(false);
   const [copyStatus, setCopyStatus] = useState("Sao chép đường liên kết");
+  const [inviteUser, setInviteUser] = useState("");
 
   // Hàm xử lý khi nhấn "Mới"
   const handleNewDoc = async () => {
@@ -621,27 +622,47 @@ export const Header = ({ title, onTitleChange, savingStatus, onNewDocument, onUn
             </button>
 
             {showSharePopup && (
-              <div className="share-popup-dropdown">
-                <div 
-                  className="share-popup-item" 
-                  onClick={async () => {
-                    try {
-                      await navigator.clipboard.writeText(window.location.href);
-                      setCopyStatus("Đã sao chép!");
-                      setTimeout(() => {
-                        setCopyStatus("Sao chép đường liên kết");
-                        setShowSharePopup(false);
-                      }, 1500);
-                    } catch (err) {
-                      console.error("Lỗi sao chép:", err);
-                    }
-                  }}
-                >
-                  <Link size={18} />
-                  <span>{copyStatus}</span>
+              <div className="share-popup-dropdown" style={{ width: '300px', padding: '16px' }}>
+                <div style={{ marginBottom: '12px' }}>
+                  <label style={{ fontSize: '14px', fontWeight: '500', display: 'block', marginBottom: '8px' }}>
+                    Mời người khác
+                  </label>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <input 
+                      type="text" 
+                      placeholder="Nhập tên người dùng..."
+                      value={inviteUser}
+                      onChange={(e) => setInviteUser(e.target.value)}
+                      style={{
+                        flex: 1,
+                        padding: '6px 10px',
+                        borderRadius: '4px',
+                        border: '1px solid #dadce0',
+                        fontSize: '14px'
+                      }}
+                    />
+                    <button 
+                      style={{
+                        backgroundColor: '#1a73e8',
+                        color: 'white',
+                        padding: '6px 12px',
+                        borderRadius: '4px',
+                        fontSize: '14px',
+                        fontWeight: '500'
+                      }}
+                      onClick={() => {
+                        console.log("Mời user:", inviteUser);
+                        // Thêm logic gửi invite của bạn ở đây
+                        setInviteUser("");
+                      }}
+                    >
+                      Gửi
+                    </button>
+                  </div>
                 </div>
+
+                <div className="share-popup-divider" style={{ margin: '12px 0' }}></div>
                 
-                <div className="share-popup-divider"></div>
               </div>
             )}
           </div>
