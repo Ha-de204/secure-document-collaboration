@@ -55,11 +55,6 @@ export const Header = ({ title, onTitleChange, savingStatus, onNewDocument, onUn
   const [copyStatus, setCopyStatus] = useState("Sao chép đường liên kết");
   const [inviteUser, setInviteUser] = useState("");
 
-  // Hàm xử lý khi nhấn "Mới"
-  const handleNewDoc = async () => {
-    onNewDocument();
-  };
-
   const saveSelection = () => {
     const sel = window.getSelection();
     if (sel.getRangeAt && sel.rangeCount) {
@@ -498,7 +493,10 @@ export const Header = ({ title, onTitleChange, savingStatus, onNewDocument, onUn
 
                   {showFileMenu && (
                     <div className="dropdown-menu main-menu">
-                      <div className="menu-item" onClick={handleNewDoc}>
+                      <div className="menu-item" onClick={() => {
+                        onNewDocument(); // Phải gọi đúng tên prop này
+                        setShowFileMenu(false);
+                      }}>
                         <div className="menu-item-left">
                           <FilePlus size={16} /> <span>Mới</span>
                         </div>
