@@ -31,19 +31,12 @@ const SkippedMessageKeyService = {
     });
   },
 
-  /**
-   * TRUY XUẤT KHÓA
-   * Dùng khi nhận được một tin nhắn cũ (sai thứ tự)
-   */
   async get(userId, ratchetPublicKey, messageNumber) {
     const db = await getDB();
     const id = `${userId}:${ratchetPublicKey}:${messageNumber}`;
     return await db.get('skippedMessageKeys', id);
   },
 
-  /**
-   * XÓA KHÓA SAU KHI DÙNG
-   */
   async remove(userId, ratchetPublicKey, messageNumber) {
     const db = await getDB();
     const id = `${userId}:${ratchetPublicKey}:${messageNumber}`;
@@ -51,7 +44,6 @@ const SkippedMessageKeyService = {
   },
 
   /**
-   * DỌN DẸP THEO LƯỢT RATCHET (DH ROTATE)
    * Khi chuỗi DH thay đổi, các khóa nhỡ của chuỗi cũ thường không còn cần thiết
    */
   async deleteByRatchet(userId, ratchetPublicKey) {
@@ -59,7 +51,6 @@ const SkippedMessageKeyService = {
     const tx = db.transaction('skippedMessageKeys', 'readwrite');
     const index = tx.store.index('by-user-ratchet');
 
-    // Quét toàn bộ các khóa có cùng [userId, ratchetPublicKey] thông qua Index
     let cursor = await index.openCursor(
       IDBKeyRange.only([userId, ratchetPublicKey])
     );

@@ -20,12 +20,10 @@ const BlockCryptoModule = {
    * Dẫn xuất khóa con từ Document Root Key (DRK)
    */
   async _deriveKey(drk, label, blockId, usages, algo) {
-    // Nhập DRK vào format HMAC để dùng làm PRF
     const masterKey = await subtle.importKey(
       "raw", drk, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]
     );
 
-    // Tạo thông tin ngữ cảnh: nhãn + blockId
     const context = stringToBuffer(`${label}|${blockId}`);
     const rawSubkey = await subtle.sign({ name: "HMAC" }, masterKey, context);
 
@@ -33,7 +31,6 @@ const BlockCryptoModule = {
   },
 
   /**
-  Mã hóa Block
   Trả về: { cipherText (base64), iv (base64) }
   */
   async encryptBlock(plaintext, drk, blockId) {

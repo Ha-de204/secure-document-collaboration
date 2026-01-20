@@ -494,7 +494,7 @@ export const Header = ({ title, onTitleChange, savingStatus, onNewDocument, onUn
                   {showFileMenu && (
                     <div className="dropdown-menu main-menu">
                       <div className="menu-item" onClick={() => {
-                        onNewDocument(); // Phải gọi đúng tên prop này
+                        onNewDocument();
                         setShowFileMenu(false);
                       }}>
                         <div className="menu-item-left">

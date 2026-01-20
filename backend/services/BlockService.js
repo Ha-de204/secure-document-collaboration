@@ -177,7 +177,7 @@ const createBlockVersion = async (userId,{
     if (latestBlock.hash !== prevHash) {
       return {
         status: false,
-        error: 'INTEGRITY_VIOLATION', // Có dấu hiệu hack hoặc xung đột dữ liệu
+        error: 'INTEGRITY_VIOLATION', 
         lastValidHash: latestBlock.hash
       };
     }
