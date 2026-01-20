@@ -1,5 +1,6 @@
 class PublicKey {
-  constructor({ userName, publicKey, metadata, publicMetadata }) {
+  constructor({ userId, userName, publicKey, metadata, publicMetadata }) {
+    this.userId = userId
     this.userName = userName;                
     this.publicKey = publicKey; 
     this.metadata = metadata || {};         

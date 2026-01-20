@@ -1,6 +1,7 @@
 import { getDB } from '../storage/indexDbService';
 import { createClientDocument } from '../models/DocumentModel';
 import { getCurrentUserId, canWrite } from '../helps/PermissionsHelper';
+import{ getPublicKey } from './PublicKeyService'
 
 export const searchDocumentClient = async ({ keyword = null }) => {
   const db = await getDB();
@@ -142,6 +143,12 @@ export const revokePrivilegesLocal = async (ownerId, userId, documentId) => {
     await db.put('documents', document);
     return { status: true, document };
 };
-export{
-    
-}
+
+export const getAccessIds = async (document) => {
+  const ids = [...new Set([...document.shareWith.map(u => u.userId)])];
+  
+  return await Promise.all(ids.map(async (id) => ({
+    userId: id,
+    publicKey: await getPublicKey(id)
+  })));
+};

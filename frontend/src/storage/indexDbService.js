@@ -19,7 +19,8 @@ export const getDB = async () => {
         db.createObjectStore('identityKey', { keyPath: 'id' });
       }
       if (!db.objectStoreNames.contains('publicKeys')) {
-        db.createObjectStore('publicKeys', { keyPath: 'userName' });
+        db.createObjectStore('publicKeys', { keyPath: 'userId' });
+        
       }
       if (!db.objectStoreNames.contains('document_keys')) {
         const drk = db.createObjectStore('document_keys', { keyPath: ['documentId', 'epoch']});
