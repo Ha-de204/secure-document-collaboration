@@ -168,12 +168,9 @@ const createBlockVersion = async (userId,{
     }
   }
 
-  // 1. Tìm bản ghi mới nhất của Block này trong DB
   const latestBlock = await Block.findOne({ blockId }).sort({ version: -1 });
 
   if (latestBlock) {
-    // 2. KIỂM TRA TÍNH TOÀN VẸN (HASH CHAIN)
-    // prevHash của Client gửi lên PHẢI trùng với hash hiện tại trong DB
     if (latestBlock.hash !== prevHash) {
       return {
         status: false,
@@ -181,7 +178,7 @@ const createBlockVersion = async (userId,{
         lastValidHash: latestBlock.hash
       };
     }
-    // 3. Kiểm tra version
+
     if (version <= latestBlock.version) {
        return { status: false, error: 'OLD_VERSION' };
     }
@@ -204,10 +201,52 @@ const createBlockVersion = async (userId,{
   }
 }
 
+const getBlocksByDocument = async (userId, documentId) => {
+  // 1. Lấy thông tin Document để biết epoch hiện tại
+  const document = await Document.findById(documentId).lean();
+  
+  if (!document) {
+    return {
+      status: false,
+      error: 'DOCUMENT_NOT_FOUND'
+    };
+  }
+
+  // 2. Kiểm tra quyền đọc của người dùng
+  if (!canAccess(document, userId, 'read')) {
+    return {
+      status: false,
+      error: 'FORBIDDEN_ACCESS'
+    };
+  }
+
+  const blocks = await Block.find({
+    documentId: documentId,
+    epoch: document.epoch
+  })
+  .sort({ index: 1, version: -1 })
+  .lean();
+
+  // 4. Xử lý logic lấy version mới nhất cho mỗi blockId (trong trường hợp 1 epoch có nhiều version)
+  const latestBlocksMap = new Map();
+  for (const block of blocks) {
+    if (!latestBlocksMap.has(block.blockId)) {
+      latestBlocksMap.set(block.blockId, block);
+    }
+  }
+
+  return {
+    status: true,
+    data: Array.from(latestBlocksMap.values()),
+    currentEpoch: document.epoch
+  };
+};
+
 module.exports = {
   accessBlock,
   removeBlockAccess,
   getLatestBlockVersion,
   getBlocks,
-  createBlockVersion
+  createBlockVersion,
+  getBlocksByDocument
 };

@@ -31,4 +31,6 @@ router.get('/:blockId/lastest', auth, blockController.getLatestBlock);
 //const { versions = [] } = req.body;
 router.delete('/versions/:blockId', auth, blockController.getBlocks);
 
+router.delete('/lastestVersion/:documentId',auth, blockController.getBlocksByDocument)
+
 module.exports = router;
