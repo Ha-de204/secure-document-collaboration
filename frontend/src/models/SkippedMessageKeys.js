@@ -1,4 +1,3 @@
-// models/SkippedMessageKey.ts
 export class SkippedMessageKey {
   constructor({
     sessionId,  // `${documentId}:${userId}`

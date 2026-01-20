@@ -2,7 +2,7 @@ export const createClientDocument = (data) => {
   return {
     localDocId: crypto.randomUUID() || crypto.randomUUID(), 
     
-    serverId: data._id || null, // Lưu _id của MongoDB sau khi sync
+    serverId: data._id || null, 
     ownerId: data.ownerId,
     title: data.title || 'Untitled Document',
     epoch: data.epoch ?? 0,

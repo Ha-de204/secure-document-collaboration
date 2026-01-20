@@ -67,6 +67,7 @@ const createDocument = async (
     userId,
     {
         title,
+        epoch,
         metadata = null,
         shareWith = [],
         publicMetadata = false
@@ -76,6 +77,7 @@ const createDocument = async (
     const document = new Document({
         ownerId: userId,
         title,
+        epoch: epoch || Date.now(),
         metadata,
         shareWith,
         publicMetadata

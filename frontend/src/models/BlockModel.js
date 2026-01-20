@@ -1,7 +1,7 @@
 export const createClientBlock = (data) => {
   return {
     localBlockId: crypto.randomUUID(), 
-    blockId: data.blockId || null, // ID từ server trả về sau khi sync
+    blockId: data.blockId || null, 
     authorId: data.authorId,
     documentId: data.documentId,
     index: data.index,

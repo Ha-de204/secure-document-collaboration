@@ -1,21 +1,11 @@
 import IndexedDBService from '../storage/IndexedDBService';
 
-/**
- * Biến lưu trữ trong RAM (Closure) để gõ phím và giải mã cực nhanh
- */
 let activeSessions = {};
 
 const RatchetPersistenceService = {
-
-  /**
-   * 1. KHỞI TẠO: Load dữ liệu từ DB lên RAM
-   * Gọi khi mở tài liệu hoặc sau khi F5
-   */
   async initSession(peerId) {
-    // Nếu trong RAM đã có thì dùng luôn
     if (activeSessions[peerId]) return activeSessions[peerId];
 
-    // Load bản rõ từ IndexedDB
     const sessionState = await IndexedDBService.getRatchetSession(peerId);
     
     if (!sessionState) {
@@ -23,7 +13,6 @@ const RatchetPersistenceService = {
       return null;
     }
 
-    // Đưa lên RAM
     activeSessions[peerId] = sessionState;
     console.log(`[Ratchet] Đã khôi phục phiên cho ${peerId} từ DB.`);
     return sessionState;

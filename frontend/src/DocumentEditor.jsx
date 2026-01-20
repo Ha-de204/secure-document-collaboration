@@ -6,7 +6,7 @@ import EditorBlock from './components/EditorBlock';
 import './styles/editor.css';
 import { useParams, useNavigate } from 'react-router-dom';
 import BlockCryptoModule from "./crypto/BlockManager";
-
+import { getDB } from './storage/indexDbService';
 
 const DocumentEditor = ({ onLogout, socket }) => {
   const { id } = useParams();
@@ -48,20 +48,14 @@ const DocumentEditor = ({ onLogout, socket }) => {
   
   const addToHistory = useCallback((newBlocks) => {
     setHistory(prev => {
-      // Chỉ lấy lịch sử tính đến bước hiện tại (loại bỏ các bước Redo cũ)
       const newHistory = prev.slice(0, currentIndex + 1);
-      // Lưu bản sao sâu để không bị dính tham chiếu
       const entry = JSON.parse(JSON.stringify(newBlocks));
       const finalHistory = [...newHistory, entry];
-      // Giới hạn 30 bước để tránh tốn bộ nhớ
       return finalHistory.slice(-30);
     });
     setCurrentIndex(prev => prev + 1);
   }, [currentIndex]);
 
-  /* ======================================================
-     INIT DOCUMENT + ROOT KEY
-  ====================================================== */
   useEffect(() => {
     if (!docID) return;
 
@@ -74,7 +68,7 @@ const DocumentEditor = ({ onLogout, socket }) => {
     socket.emit("document:join", { documentId: docID });
   }, [docID]);
 
-  // --- SOCKET LISTENERS ---
+  // SOCKET LISTENERS
   useEffect(() => {
     if (!socket || !drk) return;
 
@@ -138,10 +132,8 @@ const DocumentEditor = ({ onLogout, socket }) => {
     );
     setBlocks(newBlocks);
 
-    // Emit update qua socket
     socket.emit("block:update", { documentId: docID, blockId, content });
     
-    // Lưu vào history sau một khoảng thời gian ngừng gõ (debounce)
     clearTimeout(window.saveTimeout);
     window.saveTimeout = setTimeout(() => {
       addToHistory(newBlocks);
@@ -150,77 +142,80 @@ const DocumentEditor = ({ onLogout, socket }) => {
   }; 
 
   const handleAddBlock = async (index) => {
-  if (!drk || !currentUser) {
-    alert("Thông tin người dùng hoặc khóa chưa sẵn sàng.");
-    return;
-  }
+    try {
+      setSavingStatus('saving');
+      
+      const db = await getDB();
+      const allDocs = await db.getAll('documents'); 
+      
+      if (!allDocs || allDocs.length === 0) {
+        alert("Không tìm thấy dữ liệu tài liệu local. Vui lòng tạo tài liệu trước.");
+        setSavingStatus('error');
+        return;
+      }
 
-  try {
-    setSavingStatus('saving');
-    
-    // KIỂM TRA ĐỊNH DẠNG: docID phải là 24 ký tự Hex (Ví dụ: 65b2f...)
-    // Nếu docID lấy từ URL đang là UUID, bạn cần lấy đúng ID từ Database
-    const isValidObjectId = /^[0-9a-fA-F]{24}$/.test(docID);
-    if (!isValidObjectId) {
-       throw new Error("docID không đúng định dạng MongoDB ObjectId. Hiện tại: " + docID);
+      const docID = allDocs[allDocs.length - 1].localDocId; 
+      const token = localStorage.getItem('accessToken');
+      const newUUID = crypto.randomUUID();
+
+      const encrypted = await BlockCryptoModule.encryptBlock("", drk, newUUID);
+      const combinedCipherText = `${encrypted.iv}:${encrypted.cipherText}`;
+
+      const finalPayload = {
+        blockId: String(newUUID),
+        documentId: String(docID),
+        index: Number(index),
+        version: 1,
+        cipherText: String(combinedCipherText),
+        prevHash: "0",
+        hash: await BlockCryptoModule.calculateBlockHash({
+          blockId: newUUID,
+          cipherText: combinedCipherText,
+          prevHash: "0",
+          version: 1
+        }, drk),
+        epoch: Date.now()
+      };
+
+      const response = await fetch(`${process.env.REACT_APP_API_URL}/blocks/${docID}`, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(finalPayload)
+      });
+
+      if (!response.ok) {
+        throw new Error(`Lỗi Server: ${response.status}`);
+      }
+
+      // luu indexDB
+      const tx = db.transaction('blocks', 'readwrite');
+      await tx.objectStore('blocks').put({
+        localBlockId: newUUID,
+        documentId: docID,
+        ...finalPayload,
+        content: "", 
+        status: 'saved'
+      });
+      await tx.done;
+
+      setBlocks(prev => {
+        const updated = [...prev];
+        updated.splice(index, 0, { ...finalPayload, id: newUUID, content: "" });
+        return updated;
+      });
+
+      setSavingStatus('saved');
+      console.log("Thành công: Đã tự động tìm ID tài liệu và lưu Block!");
+
+    } catch (error) {
+      console.error("Lỗi:", error.message);
+      setSavingStatus('error');
+      alert(error.message);
     }
-
-    const newUUID = crypto.randomUUID();
-    
-    // VỚI KHỐI MỚI (Lần đầu tạo blockId này):
-    const initialPrevHash = "0"; // Khởi tạo chuỗi hash đầu tiên
-
-    const encrypted = await BlockCryptoModule.encryptBlock("", drk, newUUID);
-    const combinedCipherText = `${encrypted.iv}:${encrypted.cipherText}`;
-
-    // Tính hash cho Version 1
-    const hashValue = await BlockCryptoModule.calculateBlockHash({
-      blockId: newUUID,
-      cipherText: combinedCipherText,
-      prevHash: initialPrevHash,
-      version: 1
-    }, drk);
-
-    // CHỈ GỬI 8 TRƯỜNG MÀ JOI YÊU CẦU
-    const finalPayload = {
-      blockId: String(newUUID),
-      documentId: String(docID),
-      index: Number(index),
-      version: 1,
-      cipherText: String(combinedCipherText),
-      prevHash: String(initialPrevHash),
-      hash: String(hashValue),
-      epoch: Number(Date.now())
-    };
-
-    const response = await fetch(`${process.env.REACT_APP_API_URL}/blocks/${docID}`, {
-      method: 'POST',
-      headers: { 
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${localStorage.getItem('accessToken')}`
-      },
-      body: JSON.stringify(finalPayload)
-    });
-
-    const result = await response.json();
-
-    if (!response.ok || result.status === false) {
-      console.error("Chi tiết lỗi:", result);
-      throw new Error(result.message || "Server trả về status: false (Lỗi 500)");
-    }
-
-    setBlocks(prev => {
-      const updated = [...prev];
-      updated.splice(index, 0, { ...finalPayload, id: newUUID, content: "" });
-      return updated;
-    });
-    setSavingStatus('saved');
-    
-  } catch (error) {
-    setSavingStatus('error');
-    alert(error.message);
-  }
-};
+  };
   // Xóa block
   const handleDeleteBlock = (blockId) => {
     setBlocks(prev => prev.filter(b => b.id !== blockId));
@@ -298,39 +293,69 @@ const DocumentEditor = ({ onLogout, socket }) => {
     socket?.emit('block:lock', { blockId: id });
   };
 
-  const handleNewDocument = async () => {
-    try {
-      setSavingStatus('saving');
+ const handleNewDocument = async () => {
+  try {
+    setSavingStatus('saving');
 
-      // 1. Sinh khóa DRK mới cho tài liệu này
-      const newDrk = BlockCryptoModule.generateDRK(); 
-      setDrk(newDrk); // Lưu vào state để handleAddBlock có thể sử dụng
+    const newDrk = BlockCryptoModule.generateDRK(); 
+    const currentEpoch = 0;
 
-      // 2. Reset danh sách blocks về mảng rỗng theo yêu cầu của bạn
-      setBlocks([]); 
+    const documentPayload = {
+      title: "Tài liệu mới",
+      epoch: currentEpoch,
+      publicMetadata: false,
+      metadata: { 
 
-      // 3. Reset lịch sử Undo/Redo về trạng thái trống ban đầu
-      setHistory([[]]); 
-      setCurrentIndex(0);
+        isEncrypted: true 
+      }
+    };
 
-      // 4. Cập nhật các thông tin hiển thị
-      setDocTitle("Tài liệu mới không có tiêu đề");
-      setActiveBlockId(null);
+    const token = localStorage.getItem('accessToken');
+    const res = await fetch(`${process.env.REACT_APP_API_URL}/documents`, {
+      method: 'POST',
+      headers: { 
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}` 
+      },
+      body: JSON.stringify(documentPayload)
+    });
 
-      // 5. Lưu DB
-      const res = await fetch(`${process.env.REACT_APP_API_URL}/documents`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: "Tài liệu mới", owner: currentUser })
-      });
+    if (!res.ok) throw new Error("Server Error");
+    const result = await res.json();
+    const serverDoc = result.data;
 
-      console.log("Đã khởi tạo môi trường tài liệu mới. Hãy nhấn 'Add New Block' để bắt đầu.");
-      setSavingStatus('saved');
-    } catch (error) {
-      console.error("Lỗi khi khởi tạo tài liệu mới:", error);
-      setSavingStatus('error');
-    }
-  };
+    // 4. LƯU KHÓA (DRK) VÀO INDEXEDDB
+    const db = await getDB();
+    const tx = db.transaction(['documents', 'document_keys'], 'readwrite');
+
+    // Lưu metadata tài liệu
+    await tx.objectStore('documents').put({
+      localDocId: serverDoc._id,
+      title: documentPayload.title,
+      ownerId: serverDoc.ownerId,
+      createdAt: new Date()
+    });
+
+    await tx.objectStore('document_keys').put({
+      documentId: serverDoc._id,
+      epoch: currentEpoch,
+      drk: newDrk 
+    });
+
+    await tx.done;
+
+    setDrk(newDrk);
+    setBlocks([]);
+    setDocTitle(documentPayload.title);
+    setSavingStatus('saved');
+    
+    console.log("Khởi tạo an toàn: DRK đã lưu local, Document đã tạo trên Server.");
+
+  } catch (error) {
+    console.error("Lỗi khởi tạo tài liệu:", error);
+    setSavingStatus('error');
+  }
+};
 
   // Hàm đảo ngược trạng thái cho B, I, U, S
     const handleFormatChange = (format) => {

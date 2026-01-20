@@ -56,7 +56,7 @@ export async function initIdentity(userName, password) {
     privBuf
   );
 
-  // 2. Store local (IndexedDB via service)
+  // 2. Store local 
   await saveMyKey({
     userName,
     publicKey: bufferToBase64(pubBuf),
