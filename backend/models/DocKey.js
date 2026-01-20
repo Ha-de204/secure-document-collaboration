@@ -9,3 +9,5 @@ const DocKey = new mongoose.Schema({
     createAt: {type: Date, default: Date.now}
 })
 DocKey.index({ documentId: 1, userId: 1, epoch: 1 }, { unique: true });
+
+module.exports = mongoose.model('DocKey', DocKey)

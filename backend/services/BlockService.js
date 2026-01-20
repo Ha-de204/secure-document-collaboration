@@ -202,9 +202,7 @@ const createBlockVersion = async (userId,{
 }
 
 const getBlocksByDocument = async (userId, documentId) => {
-  // 1. Lấy thông tin Document để biết epoch hiện tại
   const document = await Document.findById(documentId).lean();
-  
   if (!document) {
     return {
       status: false,
@@ -212,7 +210,6 @@ const getBlocksByDocument = async (userId, documentId) => {
     };
   }
 
-  // 2. Kiểm tra quyền đọc của người dùng
   if (!canAccess(document, userId, 'read')) {
     return {
       status: false,
@@ -227,7 +224,7 @@ const getBlocksByDocument = async (userId, documentId) => {
   .sort({ index: 1, version: -1 })
   .lean();
 
-  // 4. Xử lý logic lấy version mới nhất cho mỗi blockId (trong trường hợp 1 epoch có nhiều version)
+  //  Xử lý logic lấy version mới nhất cho mỗi blockId (trong trường hợp 1 epoch có nhiều version)
   const latestBlocksMap = new Map();
   for (const block of blocks) {
     if (!latestBlocksMap.has(block.blockId)) {

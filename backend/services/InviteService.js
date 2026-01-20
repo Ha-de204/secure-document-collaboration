@@ -79,6 +79,7 @@ const createInvite = async ({
 
 const acceptInvite = async ({ inviteId, userId }) => {
     const invite = await Invite.findById(inviteId);
+    
     if (!invite || invite.status !== 'pending')
         throw new Error('Invalid invite');
 
@@ -87,8 +88,10 @@ const acceptInvite = async ({ inviteId, userId }) => {
         status: false,
         error: 'FORBIDDEN_ACCESS'
         };
-
-    
+    const doc = await Document.findById(invite.documentId);
+    if (!doc) {
+        return { status: false, error: 'DOCUMENT_NOT_FOUND' };
+    }
     doc.shareWith.push({
         userId: userId,
         permission: invite.permission

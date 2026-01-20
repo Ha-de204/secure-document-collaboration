@@ -15,7 +15,7 @@ const createDocKey = async (ownerId, {
             error: 'DOCUMENT_NOT_FOUND'
         }
     }
-    if(!ownerId || ownerId != document.ownerId.toString()){
+    if(!ownerId || ownerId.toString() != document.ownerId.toString()){
         return{
             status: false,
             error: 'FORBIDDEN_ACCESS'

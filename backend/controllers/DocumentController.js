@@ -57,10 +57,11 @@ const getDocumentById = async (req,res) => {
 const createDocument = async (req, res) => {
     try {
         const userId = req.user.userId;
-        const { title, metadata, shareWith, publicMetadata } = req.body;
+        const { title, epoch, metadata, shareWith, publicMetadata } = req.body;
 
         const result = await documentService.createDocument(userId, {
             title,
+            epoch,
             metadata,
             shareWith,
             publicMetadata
@@ -85,11 +86,12 @@ const updateDocument = async (req, res) => {
     try {
         const userId = req.user.userId;
         const { documentId } = req.params;
-        const { title, metadata, publicMetadata } = req.body;
+        const { title, epoch, metadata, publicMetadata } = req.body;
 
         const result = await documentService.updateDocument(
             userId,
             documentId,
+            epoch,
             title,
             metadata,
             publicMetadata
@@ -122,7 +124,7 @@ const grantPrivileges = async (req, res) => {
         const { documentId } = req.params;
         const { userId, permission } = req.body;
 
-        const result = await documentService.revokePrivileges(
+        const result = await documentService.grantPrivileges(
             ownerId,
             userId,
             documentId,
@@ -158,7 +160,7 @@ const revokePrivileges = async (req, res) => {
         const ownerId = req.user.userId;
         const { documentId, userId} = req.params;
 
-        const result = await documentService.grantPrivileges(
+        const result = await documentService.revokePrivileges(
             ownerId,
             userId,
             documentId

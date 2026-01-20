@@ -77,7 +77,7 @@ const createDocument = async (
     const document = new Document({
         ownerId: userId,
         title,
-        epoch: epoch || Date.now(),
+        epoch: epoch,
         metadata,
         shareWith,
         publicMetadata
@@ -93,6 +93,7 @@ const createDocument = async (
 const updateDocument = async (
     userId,
     documentId,
+    epoch,
     title,
     metadata = null,
     publicMetadata = null
@@ -114,6 +115,7 @@ const updateDocument = async (
 
     const update ={}
     if(title) update.title = title;
+    if(epoch) update.epoch = epoch;
     if(metadata) update.metadata = metadata;
     if(publicMetadata !== null) update.publicMetadata = publicMetadata;
    
@@ -148,7 +150,7 @@ const grantPrivileges = async (ownerId, userId,documentId,permission) => {
         error: 'CANNOT_GRANT_SELF'
     };
 }
-    const alreadyShared = document.shareWith.find(share => share.userId.toString().trim() === userId.trim());
+    const alreadyShared = document.shareWith.find(share => share.userId.toString().trim() === userId.toString().trim());
     if(alreadyShared){
         alreadyShared.permissions = permission;
     }
@@ -209,7 +211,7 @@ const deleteDocument = async (userId, documentId) => {
         error: 'ONLY_OWNER_CAN_DELETE'
         };
     }
-    await Document.DeleteOne(result);
+    await Document.deleteOne(result);
     return { status: true };
 
  } 

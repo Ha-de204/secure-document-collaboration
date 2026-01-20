@@ -64,7 +64,7 @@ export const deleteDocumentLocally = async (localDocId) => {
   const doc = await db.get('documents', localDocId);
   if (!doc) throw new Error('Khong ton tai document');
 
-  if (doc.ownerId !== (await getCurrentUserId())) {
+  if (doc.ownerId.toString() !== (await getCurrentUserId())) {
     throw new Error('Chi owner moi co quyen xoa');
   }
   const tx = db.transaction(['documents', 'blocks'], 'readwrite');
@@ -145,7 +145,7 @@ export const revokePrivilegesLocal = async (ownerId, userId, documentId) => {
 };
 
 export const getAccessIds = async (document) => {
-  const ids = [...new Set([...document.shareWith.map(u => u.userId)])];
+  const ids = [document.ownerId,...new Set([...document.shareWith.map(u => u.userId)])];
   
   return await Promise.all(ids.map(async (id) => ({
     userId: id,
