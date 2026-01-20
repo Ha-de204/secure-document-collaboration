@@ -36,6 +36,6 @@ router.put('/change-password',auth,authController.changePassword);
 router.put('/metadata',auth,authController.updateMetadata);
 //const {isPublic} = req.params;
 router.put('/metadata/public/:isPublic',auth,authController.publicMetadata);
-router.get('/:id',userController.getUserById);
-router.get('/:userName',userController.getUserByUserName)
+router.get('/username/:userName',userController.getUserByUserName)
+router.get('/:userId',userController.getUserById);
 module.exports = router

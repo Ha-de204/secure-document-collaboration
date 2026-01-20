@@ -71,7 +71,6 @@ app.use('/blocks', blockRouter);
 app.use('/documents', documentRouter);
 app.use('/doc-keys', docKeyRouter);
 
-
 // catch 404 and forward to error handler
 app.use(function(req, res, next) {
   next(createError(404));

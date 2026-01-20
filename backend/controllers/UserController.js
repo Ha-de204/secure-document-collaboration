@@ -20,8 +20,7 @@ const getUserByUserName = async (req, res) => {
 const getUserById = async (req, res) => {
         try {
             const { userId } = req.params;
-            const user = await userService.getById(userId);
-
+            const user = await userService.findById(userId);
             if (!user) {
                 return res.status(404).json({ message: 'PUBLIC_KEY_NOT_FOUND' });
             }
