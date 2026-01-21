@@ -8,7 +8,7 @@ const createDocKey = async (ownerId, {
     encryptedDocKey,
     signature
 }) => {
-    const document = await documentService.getDocumentById(documentId);
+    const document = (await documentService.getDocumentById(ownerId, documentId)).data;
     if(!document){
         return{
             status: false,
@@ -50,8 +50,8 @@ const createDocKey = async (ownerId, {
 }
 
 const getDocKey = async ({ documentId, userId }) => {
+    const document = await documentService.getDocumentById(userId,documentId);
 
-    const document = await documentService.getDocumentById(documentId);
     if(!document){
         return{
             status: false,
@@ -62,7 +62,6 @@ const getDocKey = async ({ documentId, userId }) => {
         documentId,
         userId
     }).sort({ epoch: -1 })
-
     return {
         status: true,
         data: docKeys
@@ -70,6 +69,7 @@ const getDocKey = async ({ documentId, userId }) => {
 }
 const getLastestDockey = async ({ documentId, userId }) => {
     const result = await getDocKey({documentId,userId});
+    console.log(result)
     if(!result.status) return result
     if (!result.data || result.data.length === 0) {
         return {

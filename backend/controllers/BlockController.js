@@ -114,10 +114,19 @@ const createBlockVersion = async (req, res) => {
     if (!result.status) {
       switch (result.error) {
         case 'DOCUMENT_NOT_FOUND':
-          return res.status(404).json({ status: false });
+          return res.status(404).json({ status: false , message: "DOCUMENT_NOT_FOUND"});
 
         case 'FORBIDDEN_ACCESS':
-          return res.status(403).json({ status: false });
+          return res.status(403).json({ status: false, message: "FORBIDDEN_ACCESS" });
+
+        case 'INTEGRITY_VIOLATION':
+          return res.status(HTTP_STATUS.CONFLICT).json({ status: false, message: "Hash ko khop voi hash hien tai" });
+
+        case 'OLD_VERSION':
+          return res.status(HTTP_STATUS.CONFLICT).json({ status: false, message: "Gui version cu so voi local" });
+
+        default :
+          return res.status(HTTP_STATUS.BAD_REQUEST).json({status: false, message: "Loi khong xac dinh"})
       }
     }
 
@@ -128,16 +137,16 @@ const createBlockVersion = async (req, res) => {
 
   } catch (err) {
     console.error(err);
-    return res.status(500).json({ status: false });
+    return res.status(500).json({ status: false , message: "INTERNAL_SERVER_ERROR"});
   }
 };
 
 const getLatestBlock = async (req, res) => {
   try {
     const { blockId } = req.params;
-    const userId = req.user.id;
+    const userId = req.user.userId;
 
-    const result = await getLastestBlockVersion(blockId, userId);
+    const result = await blockService.getLatestBlockVersion(blockId, userId);
 
     if (!result.status) {
       switch (result.error) {
@@ -168,9 +177,9 @@ const getBlocks = async (req, res) => {
   try {
     const { blockId } = req.params;
     const { versions = [] } = req.body;
-    const userId = req.user.id;
+    const userId = req.user.userId;
 
-    const result = await getBlocks(userId, blockId, versions);
+    const result = await blockService.getBlocks(userId, blockId, versions);
 
     if (!result.status) {
       switch (result.error) {
@@ -182,7 +191,6 @@ const getBlocks = async (req, res) => {
           return res.status(400).json(result);
       }
     }
-
     return res.status(200).json({
       status: true,
       data: result.data
@@ -202,9 +210,8 @@ const getBlocks = async (req, res) => {
 const getBlocksByDocument = async (req, res) => {
   try {
     const { documentId } = req.params;
-    const userId = req.user.userId; // Lấy từ middleware verifyToken
+    const userId = req.user.userId; 
 
-    // Gọi hàm xử lý logic từ BlockService
     const result = await blockService.getBlocksByDocument(userId, documentId);
 
     if (!result.status) {

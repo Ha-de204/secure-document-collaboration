@@ -128,6 +128,7 @@ const revokeInvite = async ({ inviteId, userId }) => {
 };
 
 module.exports = {
+    searchInvites,
     createInvite,
     acceptInvite,
     revokeInvite

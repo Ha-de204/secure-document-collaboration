@@ -61,7 +61,7 @@ const createDocKey = async (req, res) => {
 const getDocKeys = async (req, res) => {
   try {
     const { documentId } = req.params
-    const { userId } = req.query
+    const userId = req.user.userId
 
     const result = await docKeyService.getDocKey({ documentId, userId })
 
@@ -94,8 +94,8 @@ const getDocKeys = async (req, res) => {
 const getLatestDocKey = async (req, res) => {
   try {
     const { documentId } = req.params
-    const { userId } = req.query
-    
+    const userId = req.user.userId
+    console.log(userId)
     const result = await docKeyService.getLastestDockey({ documentId, userId })
 
     if (!result.status) {

@@ -99,6 +99,7 @@ const getLatestBlockVersion = async (blockId, userId) => {
       error: 'BLOCK_NOT_FOUND'
     }
   }
+
   if(!canAccess(block.documentId,userId,'read')) 
     return{
       status: false,

@@ -13,5 +13,8 @@ const Block = new mongoose.Schema({
     hash: { type: String, required: true },
     createAt: {type: Date, default: Date.now}
 })
-
+Block.index(
+    { blockId: 1, version: -1 },
+    { unique: true }
+);
 module.exports = mongoose.model('Block', Block);

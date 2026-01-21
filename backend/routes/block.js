@@ -29,8 +29,8 @@ router.get('/:blockId/lastest', auth, blockController.getLatestBlock);
 // lay cac version tu chon
 //const { blockId } = req.params;
 //const { versions = [] } = req.body;
-router.delete('/versions/:blockId', auth, blockController.getBlocks);
+router.get('/versions/:blockId', auth, blockController.getBlocks);
 
-router.delete('/lastestVersion/:documentId',auth, blockController.getBlocksByDocument)
+router.get('/lastest-version/:documentId',auth, blockController.getBlocksByDocument)
 
 module.exports = router;
