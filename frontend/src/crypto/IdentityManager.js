@@ -1,6 +1,5 @@
 import { getDB } from "../storage/indexDbService";
 import { getMyKey, saveMyKey } from "../services/IdentityKy";
-
 const subtle = window.crypto.subtle;
 
 const bufferToBase64 = (buf) =>
@@ -34,14 +33,15 @@ async function deriveMasterKey(password, salt) {
 }
 
 export async function initIdentity(userName, password) {
-  const existing = await getMyKey();
+  if (!userName) throw new Error("Dữ liệu không hợp lệ: Thiếu UserName");
+  const existing = await getMyKey(userName);
   if (existing)  return existing.publicKey;
 
   // 1. Generate Identity Key
   const keyPair = await crypto.subtle.generateKey(
-    { name: "ECDH", namedCurve: "P-256" },
+    { name: "ECDSA", namedCurve: "P-256" },
     true,
-    ["deriveKey"]
+    ["sign", "verify"]
   );
 
   const pubBuf = await crypto.subtle.exportKey("spki", keyPair.publicKey);
@@ -57,36 +57,46 @@ export async function initIdentity(userName, password) {
   );
 
   // 2. Store local 
-  await saveMyKey({
-    userName,
+  await saveMyKey(userName, {
     publicKey: bufferToBase64(pubBuf),
     encryptedPrivateKey: bufferToBase64(encryptedPriv),
-    iv: bufferToBase64(iv)
+    iv: bufferToBase64(iv),
+    algo: "ECDSA"
   });
 
   return bufferToBase64(pubBuf);
 }
 
 export async function unlockIdentity(userName, password) {
-  const record = await getMyKey();
-  if (!record) throw new Error("Identity not found");
+  const identity = await getMyKey(userName);
+  if (!identity) {
+    // Nếu getMyKey trả về undefined, lỗi này sẽ bắn ra
+    throw new Error("Không tìm thấy khóa bảo mật trên thiết bị này!");
+  }
 
   const masterKey = await deriveMasterKey(password, userName);
 
-  const decrypted = await subtle.decrypt(
-    {
-      name: "AES-GCM",
-      iv: base64ToBuffer(record.iv)
-    },
-    masterKey,
-    base64ToBuffer(record.encryptedPrivateKey)
-  );
+  try {
+    const decrypted = await subtle.decrypt(
+      {
+        name: "AES-GCM",
+        iv: base64ToBuffer(identity.iv)
+      },
+      masterKey,
+      base64ToBuffer(identity.encryptedPrivateKey)
+    );
 
-  return subtle.importKey(
-    "pkcs8",
-    decrypted,
-    { name: "ECDH", namedCurve: "P-256" },
-    false,
-    ["deriveKey"]
-  );
+    const privKey = await subtle.importKey(
+      "pkcs8",
+      decrypted,
+      { name: "ECDSA", namedCurve: "P-256" },
+      false,
+      ["sign"]
+    );
+    
+    window.myPrivateKey = privKey;
+    return privKey;
+  } catch (err) {
+    throw new Error("Mật khẩu không đúng để giải mã khóa!");
+  }
 }

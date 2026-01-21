@@ -11,6 +11,10 @@ import { createBlockVersionLocal, getLatestBlocksLocal } from './services/BlockS
 import DocumentKeyService from './services/DRKService';
 import { saveDocumentLocally } from './services/DocumentService';
 import axios from 'axios';
+import { createBlockVersionLocal, getLatestBlocksLocal } from './services/BlockService';
+import DocumentKeyService from './services/DRKService';
+import { saveDocumentLocally } from './services/DocumentService';
+import axios from 'axios';
 
 const DocumentEditor = ({ onLogout, socket }) => {
   const { id } = useParams();
@@ -147,7 +151,12 @@ const DocumentEditor = ({ onLogout, socket }) => {
 
   const handleAddBlock = async (index, type=['text']) => {
     try{
+  const handleAddBlock = async (index, type=['text']) => {
+    try{
       const db = await getDB();
+      const token = localStorage.getItem('accessToken');
+      const userId = localStorage.getItem('userId');
+
       const token = localStorage.getItem('accessToken');
       const userId = localStorage.getItem('userId');
 
@@ -156,16 +165,23 @@ const DocumentEditor = ({ onLogout, socket }) => {
       const currentDoc = allDocs[allDocs.length - 1]; 
       const docID = currentDoc.localDocId;
 
+      if (!allDocs || allDocs.length === 0) throw new Error("Không tìm thấy tài liệu.");
+      const currentDoc = allDocs[allDocs.length - 1]; 
+      const docID = currentDoc.localDocId;
+
       const newUUID = crypto.randomUUID();
+      const initialVersion = 1;
       const initialVersion = 1;
 
       const encrypted = await BlockCryptoModule.encryptBlock("", drk, newUUID);
       const combinedCipherText = `${encrypted.iv}:${encrypted.cipherText}`;
 
       const blockData = {
+      const blockData = {
         blockId: String(newUUID),
         documentId: String(docID),
         index: Number(index),
+        version: initialVersion,
         version: initialVersion,
         cipherText: String(combinedCipherText),
         prevHash: "0",
@@ -174,10 +190,13 @@ const DocumentEditor = ({ onLogout, socket }) => {
           cipherText: combinedCipherText,
           prevHash: "0",
           version: initialVersion
+          version: initialVersion
         }, drk),
+        epoch: 0
         epoch: 0
       };
 
+      // gui data len server
       // gui data len server
       const response = await fetch(`${process.env.REACT_APP_API_URL}/blocks/${docID}`, {
         method: 'POST',
@@ -185,6 +204,7 @@ const DocumentEditor = ({ onLogout, socket }) => {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
+        body: JSON.stringify(blockData)
         body: JSON.stringify(blockData)
       });
 
@@ -200,12 +220,14 @@ const DocumentEditor = ({ onLogout, socket }) => {
       }
       setSavingStatus('saved');
       console.log("Block mới đã được mã hóa và lưu qua Service thành công!");
+      console.log("Block mới đã được mã hóa và lưu qua Service thành công!");
     } catch (error) {
       console.error("Lỗi:", error.message);
       setSavingStatus('error');
       alert(error.message);
     }
   };
+
 
   // Xóa block
   const handleDeleteBlock = (blockId) => {
