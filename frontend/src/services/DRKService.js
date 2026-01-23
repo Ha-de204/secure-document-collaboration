@@ -1,4 +1,5 @@
 import { getDB } from '../storage/indexDbService';
+import { normalizeId } from '../utils/normalizeId';
 
 const DocumentKeyService = {
 
@@ -6,10 +7,10 @@ const DocumentKeyService = {
     try {
       const db = await getDB();
       await db.put('document_keys', {
-        documentId: drkModel.documentId,
+        documentId: normalizeId(drkModel.documentId),
         epoch: drkModel.epoch,
         encryptedDRK: drkModel.encryptedDRK, 
-        signedBy: drkModel.signedBy,
+        signedBy: normalizeId(drkModel.signedBy),
         signature: drkModel.signature,
         createdAt: drkModel.createdAt
       });
@@ -37,7 +38,7 @@ const DocumentKeyService = {
       const store = tx.objectStore('document_keys');
 
       const index = store.index('documentId');
-      let cursor = await index.openCursor(IDBKeyRange.only(documentId), 'prev');
+      let cursor = await index.openCursor(IDBKeyRange.only(normalizeId(documentId)), 'prev');
       
       return cursor ? cursor.value : null;
     } catch (error) {

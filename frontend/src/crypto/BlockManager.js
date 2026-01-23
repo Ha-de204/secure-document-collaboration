@@ -48,10 +48,15 @@ const BlockCryptoModule = {
 
       // 4. Mã hóa DRK bằng sharedSecret
       const iv = crypto.getRandomValues(new Uint8Array(12));
+
+      const dataToEncrypt = (typeof data === 'string') 
+        ? new TextEncoder().encode(data) 
+        : data;
+
       const encryptedDRK = await subtle.encrypt(
         { name: "AES-GCM", iv },
         sharedSecret,
-        new TextEncoder().encode(data)
+        dataToEncrypt
       );
 
       // 5. Xuất Ephemeral Public Key để người nhận có thể giải mã sau này
@@ -69,35 +74,106 @@ const BlockCryptoModule = {
     }
   },
 
- /**
- * Ký dữ liệu bằng Private Key (ECDSA)
- * @param {string} dataToSign - Dữ liệu cần ký
- * @param {CryptoKey} privateKey - Khóa private đã được unlock (window.myPrivateKey)
- */
-  async signData(dataToSign, privateKey) {
+  /**
+   * Giải mã dữ liệu (DRK) bằng Private Key của mình (Sử dụng ECIES/ECDH)
+   * @param {CryptoKey} privateKeyRaw - Khóa private đã unlock (window.myPrivateKey)
+   * @param {string} encryptedDataJson - Chuỗi JSON chứa {ephemeralPubKey, iv, cipherText}
+   */
+  async decryptWithPrivateKey(privateKeyRaw, encryptedDataJson) {
     try {
-      // 1. Kiểm tra nếu privateKey chưa được truyền vào hoặc sai định dạng
-      const key = privateKey || window.myPrivateKey;
-      if (!key) {
-        throw new Error("Private Key không khả dụng. Vui lòng unlock identity.");
+      let keyBuffer;
+
+      console.log("Dữ liệu nhận được tại decryptWithPrivateKey:", privateKeyRaw);
+
+      if (typeof privateKeyRaw === 'object' && privateKeyRaw.privateKey) {
+          // Trường hợp nhận được Object {publicKey: "...", privateKey: "..."}
+          // Ta lấy trường privateKey và giải mã Base64 sang Buffer
+          keyBuffer = decodeBuffer(privateKeyRaw.privateKey);
+      } else if (typeof privateKeyRaw === 'string') {
+          // Trường hợp chỉ nhận được chuỗi Base64 của private key
+          keyBuffer = decodeBuffer(privateKeyRaw);
+      } else if (privateKeyRaw instanceof ArrayBuffer || privateKeyRaw instanceof Uint8Array) {
+          // Trường hợp đã là Buffer
+          keyBuffer = privateKeyRaw;
+      } else {
+          throw new Error("Định dạng privateKey không xác định hoặc bị thiếu.");
       }
 
-      // 2. Encode dữ liệu
-      const encoder = new TextEncoder();
-      const dataBuffer =typeof dataToSign === 'string' ? encoder.encode(dataToSign) : dataToSign;
+      const { ephemeralPubKey, iv, cipherText } = JSON.parse(encryptedDataJson);
 
-      // 3. Thực hiện ký với thuật toán ECDSA (Tương thích với P-256 trong IdentityManager)
-      const signatureBuffer = await window.crypto.subtle.sign(
-        {
-          name: "ECDSA",
-          hash: { name: "SHA-256" },
-        },
-        key,
-        dataBuffer
+      const myPrivateKey = await subtle.importKey(
+        "pkcs8", 
+        keyBuffer, 
+        { name: "ECDH", namedCurve: "P-256" },
+        false, 
+        ["deriveKey"]
+      );
+        
+      // 1. Import Ephemeral Public Key từ người gửi
+      const senderPubKeyBuf = decodeBuffer(ephemeralPubKey);
+
+      const senderPublicKey = await subtle.importKey(
+        "spki", senderPubKeyBuf,
+        { name: "ECDH", namedCurve: "P-256" },
+        false, []
       );
 
-      // 4. Trả về Base64
-      return encodeBuffer(signatureBuffer);
+      // 2. Thỏa thuận khóa (Derive Shared Secret) bằng Private Key của mình và Public Key tạm thời
+      const sharedSecret = await subtle.deriveKey(
+        { name: "ECDH", public: senderPublicKey },
+        myPrivateKey, 
+        { name: "AES-GCM", length: 256 },
+        false, ["decrypt"]
+      );
+
+      // 3. Giải mã dữ liệu bằng sharedSecret
+      const decryptedBuffer = await subtle.decrypt(
+        { name: "AES-GCM", iv: decodeBuffer(iv) },
+        sharedSecret,
+        decodeBuffer(cipherText)
+      );
+
+      // 4. Chuyển buffer về dạng thô (Uint8Array 32 bytes) hoặc String tùy cách bạn dùng
+      // Vì generateDRK tạo ra Uint8Array(32), ta nên trả về Uint8Array
+      return new Uint8Array(decryptedBuffer);
+    } catch (error) {
+      console.error("Lỗi giải mã bằng Private Key:", error);
+      throw new Error("Không thể giải mã khóa tài liệu. Có thể mật khẩu ví sai hoặc khóa bị hỏng.");
+    }
+  },
+
+ /**
+ * Ký dữ liệu bằng Private Key (ECDSA)
+ * @param {string} data - Dữ liệu cần ký
+ * @param {CryptoKey} privateKeyBase64 - Khóa private đã được unlock (window.myPrivateKey)
+ */
+  async signData(data, privateKeyBase64) {
+    try {
+      const privBuf = decodeBuffer(privateKeyBase64);
+      
+      // Import khóa với thuật toán ECDSA
+      const privateKey = await subtle.importKey(
+        "pkcs8",
+        privBuf,
+        {
+          name: "ECDSA",
+          namedCurve: "P-256",
+        },
+        false,
+        ["sign"]
+      );
+
+      // Thực hiện ký
+      const signature = await subtle.sign(
+        {
+          name: "ECDSA",
+          hash: { name: "SHA-256" }, 
+        },
+        privateKey,
+        typeof data === 'string' ? stringToBuffer(data) : data
+      );
+
+      return encodeBuffer(signature);
     } catch (error) {
       console.error("Lỗi khi ký dữ liệu ECDSA:", error);
       throw error;
@@ -127,7 +203,7 @@ const BlockCryptoModule = {
       ["encrypt"], { name: "AES-GCM", length: 256 }
     );
 
-    const iv = getRandomBytes(12); 
+    const iv = crypto.getRandomValues(new Uint8Array(12));
     const encrypted = await subtle.encrypt(
       { name: "AES-GCM", iv: iv },
       aesKey,

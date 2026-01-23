@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 
-const EditorBlock = ({ block, onFocus, isFocused, fontFamily, onChange, onEnter, onDelete, onBlur }) => {
+const EditorBlock = ({ block, onFocus, isFocused, fontFamily, onChange, onEnter, onBlur }) => {
   const ref = useRef(null);
   const isResizing = useRef(false);
   const startX = useRef(0);
@@ -69,19 +69,7 @@ const EditorBlock = ({ block, onFocus, isFocused, fontFamily, onChange, onEnter,
   };
 
   const handleKeyDown = (e) => {
-    if (e.key === 'Backspace') {
-      const selection = window.getSelection();
-      const range = selection.getRangeAt(0);
-      
-      if (ref.current.innerHTML === '' || (range.startOffset === 0 && range.endOffset === 0)) {
-        if (ref.current.innerHTML === '' || ref.current.innerText.length === 0) {
-          e.preventDefault();
-          onDelete(); 
-          return;
-        }
-      }
-    }
-
+  
     // Xóa ảnh
     if (e.key !== 'Backspace' && e.key !== 'Delete') return;
     const selection = window.getSelection();

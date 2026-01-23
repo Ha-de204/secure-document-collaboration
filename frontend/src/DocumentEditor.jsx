@@ -9,22 +9,17 @@ import BlockCryptoModule from "./crypto/BlockManager";
 import { getDB } from './storage/indexDbService';
 import { createBlockVersionLocal, getLatestBlocksLocal } from './services/BlockService';
 import DocumentKeyService from './services/DRKService';
-import { saveDocumentLocally } from './services/DocumentService';
+import { saveDocumentLocally, getLocalDocument } from './services/DocumentService';
 import axios from 'axios';
-import { createBlockVersionLocal, getLatestBlocksLocal } from './services/BlockService';
-import DocumentKeyService from './services/DRKService';
-import { saveDocumentLocally } from './services/DocumentService';
-import axios from 'axios';
+import { unlockIdentity } from './crypto/IdentityManager';
 
 const DocumentEditor = ({ onLogout, socket }) => {
   const { id } = useParams();
-  const docID = id;
   const navigate = useNavigate();
-  const currentUser = localStorage.getItem('currentUser') || "Guest";
+  const currentUser = localStorage.getItem('userName') || "Guest";
+  const isInitialMount = useRef(true);
 
   const cryptoRef = useRef(BlockCryptoModule);
-  const drkRef = useRef(null);
-  const [documentRootKey, setDocumentRootKey] = useState(null);
   const [drk, setDrk] = useState(null);
 
   const [blocks, setBlocks] = useState([]);
@@ -65,16 +60,95 @@ const DocumentEditor = ({ onLogout, socket }) => {
   }, [currentIndex]);
 
   useEffect(() => {
-    if (!docID) return;
+    if (!id || !socket) return;
 
-    const initEmptyDoc = async () => {
-      const newDrk = BlockCryptoModule.generateDRK();
-      setDrk(newDrk);
+    socket.emit("document:join", { documentId: id });
+
+    return () => {
+      socket.emit("document:leave", { documentId: id });
+    };
+  }, [id, socket]);
+
+  useEffect(() => {
+    const loadDocumentData = async () => {
+      if (!isInitialMount.current || !id) return;
+      isInitialMount.current = false;
+      
+      try {
+        let localDoc = await getLocalDocument(id);
+
+        if (!localDoc) {
+          const token = localStorage.getItem('accessToken');
+          const res = await axios.get(`${process.env.REACT_APP_API_URL}/documents/${id}`, {
+            headers: { 'Authorization': `Bearer ${token}` }
+          });
+          
+          if (res.data.status) {
+            localDoc = await saveDocumentLocally({
+                ...res.data.data,
+                localDocId: id
+            });
+            console.log("✅ Đã đồng bộ tài liệu từ server về local");
+          }
+        }
+
+        if (localDoc) {
+          console.log("✅ Đã tìm thấy tài liệu:", localDoc);
+          setDocTitle(localDoc.title || "Tài liệu chưa có tiêu đề");
+
+          let myPrivateKey = window.myPrivateKey;
+          if (!myPrivateKey) {
+            const password = prompt("Tài liệu này đã được mã hóa. Vui lòng nhập mật khẩu ví để mở khóa:");
+            if (!password){
+              navigate('/');
+              return;
+            }
+            const userName = localStorage.getItem('userName');
+            myPrivateKey = await unlockIdentity(userName, password);
+            window.myPrivateKey = myPrivateKey;
+          }
+
+          // Lấy lại khóa DRK từ Service
+          const keyData = await DocumentKeyService.getLatestDRK(id);
+          if (keyData && myPrivateKey) {
+            const decryptedDRK = await BlockCryptoModule.decryptWithPrivateKey(
+                myPrivateKey, 
+                keyData.encryptedDRK
+            );
+            setDrk(decryptedDRK);
+
+            const latestBlocks = await getLatestBlocksLocal(id);
+            const decryptedBlocks = await Promise.all(latestBlocks.map(async (b) => {
+              try {
+                const dataToDecrypt = b.cipherText || b.content || "";
+                let plainText = "";
+
+                if (dataToDecrypt && typeof dataToDecrypt === 'string' && dataToDecrypt.includes(':')) {
+                  plainText = await BlockCryptoModule.decryptBlock(dataToDecrypt, decryptedDRK);
+                  return { ...b, content: plainText, id: b.blockId, blockId: b.blockId, };
+                }
+
+                
+                return { ...b, content: b.content || "", id: b.blockId, blockId: b.blockId, };
+              } catch (e) {
+                return { ...b, content: "[Lỗi giải mã]", id: b.blockId };
+              }
+            }));
+            setBlocks(decryptedBlocks);
+            addToHistory(decryptedBlocks);
+          }
+        }
+      } catch (err) {
+        if (err.response && err.response.status === 404) {
+          console.error("❌ Tài liệu không tồn tại trên cả Local và Server.");
+        } else {
+          console.error("Lỗi khi tải tài liệu:", err);
+        }
+      }
     };
 
-    initEmptyDoc();
-    socket.emit("document:join", { documentId: docID });
-  }, [docID]);
+    loadDocumentData();
+  }, [id]); 
 
   // SOCKET LISTENERS
   useEffect(() => {
@@ -108,10 +182,10 @@ const DocumentEditor = ({ onLogout, socket }) => {
     );
   });
   
-    socket.on("block:update", payload => {
-      const plain = cryptoRef.current.decryptBlock(payload);
+    socket.on("block:update", async (payload) => {
+      const plainText = await cryptoRef.current.decryptBlock(payload.cipherText, drk);
       setBlocks(prev =>
-        prev.map(b => b.id === payload.blockId ? plain : b)
+        prev.map(b => b.id === payload.blockId ? { ...b, content: plainText } : b)
       );
     });
 
@@ -120,68 +194,73 @@ const DocumentEditor = ({ onLogout, socket }) => {
       setBlocks(prev => [...prev, plain]);
     });
 
-    socket.on("block:delete", ({ blockId }) => {
-      setBlocks(prev => prev.filter(b => b.id !== blockId));
-    });
-
     return () => {
       socket.off("block:locked");
       socket.off("block:unlocked");
       socket.off("block:update");
       socket.off("block:create");
-      socket.off("block:delete")
     };
-  }, [socket]);
+  }, [socket, drk]);
 
   const handleBlockChange = (blockId, content) => {
     setSavingStatus('saving');
     const newBlocks = blocks.map(block => 
-      block.id === blockId ? { ...block, content } : block
+      (block.blockId === blockId || block.id === blockId) ? { ...block, content } : block
     );
     setBlocks(newBlocks);
-
-    socket.emit("block:update", { documentId: docID, blockId, content });
     
     clearTimeout(window.saveTimeout);
-    window.saveTimeout = setTimeout(() => {
-      addToHistory(newBlocks);
-      setSavingStatus('saved');
+    window.saveTimeout = setTimeout(async () => {
+      const userId = localStorage.getItem('userId'); 
+      const blockToSave = newBlocks.find(b => b.blockId === blockId || b.id === blockId);
+      
+      if (blockToSave && userId) {
+        try {
+          const encrypted = await BlockCryptoModule.encryptBlock(content, drk, blockId);
+          const combined = `${encrypted.iv}:${encrypted.cipherText}`;
+
+          await createBlockVersionLocal(userId, {
+            ...blockToSave,
+            version: (blockToSave.version || 1) + 1,
+            cipherText: combined
+          });
+
+           socket.emit("block:update", { documentId: id, blockId, ciphertext: combined });
+
+           addToHistory(newBlocks);
+           setSavingStatus('saved');
+        } catch (error) {
+          console.error("Lỗi khi lưu block local:", error);
+          setSavingStatus('error');
+        }
+      }
+      
     }, 1000);
-  }; 
+  };
 
-  const handleAddBlock = async (index, type=['text']) => {
+  const handleAddBlock = async (index) => {
+    if (!drk) {
+      alert("Chưa có khóa giải mã. Vui lòng tải lại trang.");
+      return;
+    }
+
     try{
-  const handleAddBlock = async (index, type=['text']) => {
-    try{
-      const db = await getDB();
+      setSavingStatus('saving');
       const token = localStorage.getItem('accessToken');
       const userId = localStorage.getItem('userId');
 
-      const token = localStorage.getItem('accessToken');
-      const userId = localStorage.getItem('userId');
-
-      const allDocs = await db.getAll('documents'); 
-      if (!allDocs || allDocs.length === 0) throw new Error("Không tìm thấy tài liệu.");
-      const currentDoc = allDocs[allDocs.length - 1]; 
-      const docID = currentDoc.localDocId;
-
-      if (!allDocs || allDocs.length === 0) throw new Error("Không tìm thấy tài liệu.");
-      const currentDoc = allDocs[allDocs.length - 1]; 
-      const docID = currentDoc.localDocId;
+      const currentServerDocId = id;
 
       const newUUID = crypto.randomUUID();
-      const initialVersion = 1;
       const initialVersion = 1;
 
       const encrypted = await BlockCryptoModule.encryptBlock("", drk, newUUID);
       const combinedCipherText = `${encrypted.iv}:${encrypted.cipherText}`;
 
       const blockData = {
-      const blockData = {
         blockId: String(newUUID),
-        documentId: String(docID),
-        index: Number(index),
-        version: initialVersion,
+        documentId: currentServerDocId,
+        index: Number(index + 1),
         version: initialVersion,
         cipherText: String(combinedCipherText),
         prevHash: "0",
@@ -190,50 +269,41 @@ const DocumentEditor = ({ onLogout, socket }) => {
           cipherText: combinedCipherText,
           prevHash: "0",
           version: initialVersion
-          version: initialVersion
         }, drk),
-        epoch: 0
         epoch: 0
       };
 
       // gui data len server
-      // gui data len server
-      const response = await fetch(`${process.env.REACT_APP_API_URL}/blocks/${docID}`, {
+      const response = await fetch(`${process.env.REACT_APP_API_URL}/blocks/${currentServerDocId}`, {
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
         body: JSON.stringify(blockData)
-        body: JSON.stringify(blockData)
       });
 
       if (!response.ok) {
-        throw new Error(`Lỗi Server: ${response.status}`);
+        const errorData = await response.json();
+        throw new Error(errorData.message || `Lỗi Server: ${response.status}`);
       }
 
       // luu indexDB
-      const result = await createBlockVersionLocal(userId, blockData);
-      if (result.status) {
-        const updatedBlocks = await getLatestBlocksLocal(docID);
-        setBlocks(updatedBlocks);
-      }
-      setSavingStatus('saved');
-      console.log("Block mới đã được mã hóa và lưu qua Service thành công!");
-      console.log("Block mới đã được mã hóa và lưu qua Service thành công!");
+      await createBlockVersionLocal(userId, blockData);
+      const newBlockForUI = { ...blockData, content: "", id: newUUID };
+      const newBlocksArray = [...blocks];
+      newBlocksArray.splice(index + 1, 0, newBlockForUI);
+      
+      const finalBlocks = newBlocksArray.map((b, i) => ({ ...b, index: i }));
+
+      setBlocks(finalBlocks);
+      addToHistory(finalBlocks);
+      setSavingStatus('saved')
     } catch (error) {
-      console.error("Lỗi:", error.message);
+      console.error("Lỗi handleAddBlock:", error.message);
       setSavingStatus('error');
       alert(error.message);
     }
-  };
-
-
-  // Xóa block
-  const handleDeleteBlock = (blockId) => {
-    setBlocks(prev => prev.filter(b => b.id !== blockId));
-    socket.emit("block:delete", { documentId: docID, blockId });
-    setTimeout(() => setSavingStatus('saved'), 600);
   };
 
   const handleAlignBlock = (alignment) => {
@@ -276,7 +346,7 @@ const DocumentEditor = ({ onLogout, socket }) => {
   // ham mo khoa block khi k focus nx
   const handleBlockBlur = (id) => {
     setActiveBlockId(null);
-      if (socket && docID) {
+      if (socket && id) {
         setTimeout(() => {
           socket.emit('block:unlock', { blockId: id });
         }, 100);
@@ -315,6 +385,9 @@ const DocumentEditor = ({ onLogout, socket }) => {
         const db = await getDB();
         const userId = localStorage.getItem('userId');
         const userName = localStorage.getItem('userName');
+        if (!userName || userName === "Guest") {
+          throw new Error("Vui lòng đăng nhập lại!");
+        }
         let publicKey = null;
 
         // kiem tra indexDB
@@ -336,7 +409,7 @@ const DocumentEditor = ({ onLogout, socket }) => {
         if (!publicKey) throw new Error("Không tìm thấy Public Key để mã hóa tài liệu.");
          // luu lai vao indexDB
           await db.put("publicKeys", {
-            userId, userId,
+            userId: userId,
             userName: userName,
             publicKey: publicKey,
             createdAt: new Date()
@@ -345,14 +418,15 @@ const DocumentEditor = ({ onLogout, socket }) => {
         // Ma hoa newDRK
         const encryptedDRK = await BlockCryptoModule.encryptWithPublicKey(publicKey, newDrk);
         console.log("Dữ liệu DRK đã mã hóa:", encryptedDRK);
-        const myPrivateKey = window.myPrivateKey;
-        if (!myPrivateKey) {
-          // Nếu mất session, yêu cầu người dùng nhập lại pass hoặc tự động lấy từ state quản lý
-          alert("Phiên làm việc hết hạn, vui lòng mở khóa lại ví!");
-          return;
-        }
-        const signature = await BlockCryptoModule.signData(encryptedDRK, myPrivateKey);
 
+        const password = window.prompt("Vui lòng nhập mật khẩu để xác thực khóa bảo mật:");
+        if (password === null) { 
+            setSavingStatus('saved');
+            return; 
+        }
+        const identityData = await unlockIdentity(currentUser, password); 
+        const signature = await BlockCryptoModule.signData(encryptedDRK, identityData.privateKey);
+        
         const newDocData = {
           ownerId: userId,
           title: "Tài liệu chưa có tiêu đề",
@@ -387,24 +461,29 @@ const DocumentEditor = ({ onLogout, socket }) => {
           },
           body: JSON.stringify({
             documentId: serverDocId, 
-            encryptedDRK: encryptedDRK,
+            userId: userId,
+            encryptedDocKey: encryptedDRK,
             signature: signature,
             epoch: 0
           })
         });
         const keyResult = await keyRes.json();
-        if (!keyResult.status) throw new Error("Không thể lưu khóa trên server");
+        if (!keyResult.status) {
+          console.log("Lỗi khi tạo Doc Key:", keyResult.message)
+          throw new Error(keyResult.message || "Không thể lưu khóa tài liệu lên máy chủ.");
+        }
 
          // 2. Luu meta doc
-        const savedDoc = await saveDocumentLocally({
+        
+        await saveDocumentLocally({
           ...newDocData,
+          localDocId: serverDocId,
           serverId: serverDocId 
         });
-        const localId = savedDoc.localDocId;
 
         // 3. Lưu khoa vào IndexedDB 
         const drkModel = {
-          documentId: localId,
+          documentId: serverDocId,
           epoch: 0,
           encryptedDRK: encryptedDRK,
           signedBy: userId,
@@ -413,10 +492,8 @@ const DocumentEditor = ({ onLogout, socket }) => {
         }
         await DocumentKeyService.saveDRK(drkModel);
 
-        if (localId) {
-          // 4. Điều hướng người dùng tới trang chỉnh sửa với ID vừa tạo
-          navigate(`/document/${localId}`);
-        }
+        console.log("✅ Đã lưu local thành công, chuẩn bị điều hướng...");
+        navigate(`/document/${serverDocId}`, { replace: true });
       } catch (error) {
         console.error("Lỗi khi tạo tài liệu mới:", error);
         alert("Không thể tạo tài liệu mới, vui lòng thử lại.");
@@ -463,15 +540,14 @@ const DocumentEditor = ({ onLogout, socket }) => {
         <div className="document-paper" style={{ transform: `scale(${zoom / 100})`, transformOrigin: 'top center', fontFamily: fontFamily }}>
           {blocks.map((block, index) => (
             <EditorBlock 
-              key={block.id} 
+              key={block.blockId || block.id}
               block={block} 
               isLocked={block.status === 'locked'}
-              isFocused={activeBlockId === block.id}
-              onFocus={() => handleBlockFocus(block.id)} 
-              onBlur={() => handleBlockBlur(block.id)}
+              isFocused={activeBlockId === (block.blockId || block.id)}
+              onFocus={() => handleBlockFocus(block.blockId || block.id)} 
+              onBlur={() => handleBlockBlur(block.blockId || block.id)}
               onChange={handleBlockChange} 
               onEnter={() => handleAddBlock(index)}
-              onDelete={() => handleDeleteBlock(block.id)}
               fontFamily={fontFamily} 
               formats={textFormats}
             />
@@ -483,5 +559,5 @@ const DocumentEditor = ({ onLogout, socket }) => {
     </div>
   );
 };
+export default DocumentEditor;                                                                                                                        
 
-export default DocumentEditor;

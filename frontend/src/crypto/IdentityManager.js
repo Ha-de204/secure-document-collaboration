@@ -77,7 +77,7 @@ export async function unlockIdentity(userName, password) {
   const masterKey = await deriveMasterKey(password, userName);
 
   try {
-    const decrypted = await subtle.decrypt(
+    const decryptedBuffer = await subtle.decrypt(
       {
         name: "AES-GCM",
         iv: base64ToBuffer(identity.iv)
@@ -86,17 +86,16 @@ export async function unlockIdentity(userName, password) {
       base64ToBuffer(identity.encryptedPrivateKey)
     );
 
-    const privKey = await subtle.importKey(
-      "pkcs8",
-      decrypted,
-      { name: "ECDSA", namedCurve: "P-256" },
-      false,
-      ["sign"]
-    );
+    const privateKeyBase64 = bufferToBase64(decryptedBuffer);
+    window.myPrivateKeyBase64 = privateKeyBase64;
+
+    return {
+        publicKey: identity.publicKey,
+        privateKey: privateKeyBase64 
+    };
     
-    window.myPrivateKey = privKey;
-    return privKey;
   } catch (err) {
+    console.error("Lỗi giải mã Identity:", err);
     throw new Error("Mật khẩu không đúng để giải mã khóa!");
   }
 }

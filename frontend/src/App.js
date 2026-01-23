@@ -82,7 +82,7 @@ function App() {
             <>
               {/* Trang Editor với ID động */}
               <Route 
-                path="/editor/:id" 
+                path="/document/:id" 
                 element={
                   socket ? (
                     <DocumentEditor socket={socket} onLogout={handleLogout} />
@@ -94,7 +94,7 @@ function App() {
               
               {/* Nếu vào trang chủ, chuyển hướng đến một ID mẫu (để tránh lỗi undefined) 
                   Hoặc bạn có thể tạo trang Dashboard liệt kê danh sách tài liệu tại đây */}
-              <Route path="/" element={<Navigate to="/editor/60d5ecfd7ad167123456789a" />} />
+              <Route path="/" element={<Navigate to="/document/60d5ecfd7ad167123456789a" />} />
             </>
           )}
         </Routes>

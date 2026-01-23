@@ -474,13 +474,13 @@ export const Header = ({ title, onTitleChange, savingStatus, onNewDocument, onUn
 
                 <div className="title-actions">
                     {savingStatus === 'saving' ? (
-                    <span style={{ fontSize: '15px', color: '#373839', marginLeft: '8px', whiteSpace: 'nowrap' }}>
+                    <span style={{ fontSize: '16px', color: '#373839', marginLeft: '8px', whiteSpace: 'nowrap' }}>
                       Đang lưu...
                     </span>
                     ) : (
                     <div title="Đã lưu vào bộ nhớ" style={{ display: 'flex', alignItems: 'center' }}>
-                      <CloudCheck size={30} className="title-icon" style={{ color: '#373839' }} />
-                      <span style={{ fontSize: '15px', color: '#373839', marginLeft: '5px' }}>
+                      <CloudCheck size={28} className="title-icon" style={{ color: '#373839' }} />
+                      <span style={{ fontSize: '16px', color: '#373839', marginLeft: '5px' }}>
                         Đã lưu
                       </span>
                     </div>
