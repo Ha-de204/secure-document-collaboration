@@ -82,8 +82,34 @@ const getLastestDockey = async ({ documentId, userId }) => {
         data: result.data[0]
     }
 }
+const getDocKeyByVersion = async ({ documentId, userId, epoch }) => {
+    const document = await documentService.getDocumentById(userId,documentId);
+    if(!document){
+        return{
+            status: false,
+            error: 'DOCUMENT_NOT_FOUND'
+        }
+    }
+    const docKey = await DocKey.findOne({
+        documentId,
+        userId,
+        epoch
+    })
+    if (!docKey) {
+        return {
+            status: false,
+            error: 'DOC_KEY_NOT_FOUND'
+        }
+    }
+    return {
+        status: true,
+        data: docKey
+    }
+
+}
 module.exports = {
     getLastestDockey,
     createDocKey,
-    getDocKey
+    getDocKey,
+    getDocKeyByVersion
 }

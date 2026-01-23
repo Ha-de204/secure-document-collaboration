@@ -30,6 +30,7 @@ const getDocumentById = async (req,res) => {
     try{
         const {documentId} = req.params;
         const userId = req.user.userId; 
+        console.log(userId)
         const result = await documentService.getDocumentById(userId,documentId);
         if(!result.status){
             if(result.error === 'DOCUMENT_NOT_FOUND'){

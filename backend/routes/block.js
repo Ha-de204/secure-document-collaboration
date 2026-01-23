@@ -29,7 +29,7 @@ router.get('/:blockId/lastest', auth, blockController.getLatestBlock);
 // lay cac version tu chon
 //const { blockId } = req.params;
 //const { versions = [] } = req.body;
-router.get('/versions/:blockId', auth, blockController.getBlocks);
+router.post('/versions/:blockId', auth, blockController.getBlocks);
 
 router.get('/lastest-version/:documentId',auth, blockController.getBlocksByDocument)
 

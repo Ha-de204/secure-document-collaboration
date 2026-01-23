@@ -2,6 +2,7 @@ const Block = require('../models/Block');
 const Document = require('../models/Document');
 const { redis } = require('../config/redis');
 const Joi = require('joi');
+const DocKey = require('../models/DocKey');
 const {canAccess} = require('../helpers/DocPermissionHelper')
 
 const accessBlock = async ( blockId, userId, ttlSeconds ) => {
@@ -139,9 +140,17 @@ const getBlocks = async (
       status: false,
       error: 'FORBIDDEN_ACCESS'
     }
+  const userKeyEntry = await DocKey.findOne({
+    documentId: blocks[0].documentId,
+    userId: userId
+  }).lean();
+
   return {
     status: true,
-    data: blocks
+    data: {
+      blocks: blocks,
+      userKeyEntry: userKeyEntry || null
+      }
   }
 }
 
@@ -222,6 +231,7 @@ const getBlocksByDocument = async (userId, documentId) => {
     documentId: documentId,
     epoch: document.epoch
   })
+  .select('blockId version hash index')
   .sort({ index: 1, version: -1 })
   .lean();
 
@@ -232,6 +242,7 @@ const getBlocksByDocument = async (userId, documentId) => {
       latestBlocksMap.set(block.blockId, block);
     }
   }
+  
 
   return {
     status: true,
