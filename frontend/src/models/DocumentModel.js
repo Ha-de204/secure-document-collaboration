@@ -1,10 +1,10 @@
 export const createClientDocument = (data) => {
   return {
-    localDocId: crypto.randomUUID() || crypto.randomUUID(), 
+    localDocId: data.localDocId || data._id || data.serverId || crypto.randomUUID(),
     
     serverId: data._id || null, 
     ownerId: data.ownerId,
-    title: data.title || 'Untitled Document',
+    title: data.title || 'Tài liệu không có tiêu đề',
     epoch: data.epoch ?? 0,
     metadata: data.metadata || {},
     

@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
 import { LogIn, UserPlus, Lock, User, Eye, EyeOff } from 'lucide-react';
 import { sha256 } from 'js-sha256';
+import { getDB } from "./storage/indexDbService";
 
 import { initIdentity, unlockIdentity } from "./crypto/IdentityManager";
+import { getMyKey } from './services/IdentityKy';
 
 const Auth = ({ onAuthSuccess }) => {
   const [isLogin, setIsLogin] = useState(true);
@@ -21,8 +23,6 @@ const Auth = ({ onAuthSuccess }) => {
 
     try {
       const baseUrl = process.env.REACT_APP_API_URL;
-      console.log("Base API URL:", baseUrl);
-
       if (!baseUrl) {
         alert("Lỗi: Không tìm thấy REACT_APP_API_URL. Hãy kiểm tra lại file .env và restart frontend!");
         return;
@@ -50,21 +50,47 @@ const Auth = ({ onAuthSuccess }) => {
       });
 
       const result = await response.json();
+      console.log("HTTP status:", response.status);
+      console.log("Response result:", result);
 
       if (!response.ok) throw new Error(result.message || 'Có lỗi xảy ra');
 
       if (isLogin) {
-        await unlockIdentity(
-          formData.userName,
-          formData.password
-        );
-        
-        // Lưu Token và Username (để hiển thị)
+        // 1. Lưu thông tin cơ bản trước để đảm bảo không bị trống
         const token = result.data;
-        const currentUser = result.user;
-        localStorage.setItem('accessToken', token);
-        localStorage.setItem('currentUser', currentUser);
-        onAuthSuccess({ token, userName: formData.userName});
+        const user = result.user;
+
+        if (typeof token !== "string" || !user?._id) {
+          throw new Error("Dữ liệu đăng nhập không hợp lệ");
+        }
+
+        const currentUserId = user._id || user.id;
+        const currentUserName = user.userName || formData.userName;
+
+        localStorage.setItem("accessToken", token);
+        localStorage.setItem("userId", user._id || user.id || user.userId);
+        localStorage.setItem("userName", user.userName || formData.userName);
+        localStorage.setItem("currentUser", JSON.stringify(user));
+
+        console.log("LocalStorage:", localStorage);
+
+        // 2. Mới tiến hành mở khóa Identity
+        try {
+          await unlockIdentity(currentUserName, formData.password);
+          const pubKey = await initIdentity(currentUserName, formData.password);
+          const db = await getDB();
+          await db.put('publicKeys', {
+            userId: currentUserId,
+            userName: currentUserName,
+            publicKey: pubKey,
+            createdAt: new Date()
+          });
+          console.log("✅ Đã đồng bộ Public Key vào IndexedDB");
+        } catch (cryptoErr) {
+          console.error("Lỗi giải mã Identity nhưng vẫn cho vào trang chính:", cryptoErr);
+        }
+        // 3. Thông báo thành công
+        onAuthSuccess({ token, user });
       } else {
         alert('Đăng ký thành công!');
         setIsLogin(true);
@@ -72,6 +98,7 @@ const Auth = ({ onAuthSuccess }) => {
       }
     } catch (err) {
       setError(err.message);
+      localStorage.removeItem('accessToken');
     } finally {
       setLoading(false);
     }

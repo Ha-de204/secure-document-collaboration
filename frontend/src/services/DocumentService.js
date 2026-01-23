@@ -1,7 +1,8 @@
 import { getDB } from '../storage/indexDbService';
 import { createClientDocument } from '../models/DocumentModel';
 import { getCurrentUserId, canWrite } from '../helps/PermissionsHelper';
-import{ getPublicKey } from './PublicKeyService'
+import{ getPublicKey } from './PublicKeyService';
+import { normalizeId } from '../utils/normalizeId';
 
 export const searchDocumentClient = async ({ keyword = null }) => {
   const db = await getDB();

@@ -213,6 +213,16 @@ const DocumentEditor = ({ onLogout, socket }) => {
   }, [id, socket]);
 
   useEffect(() => {
+    if (!id || !socket) return;
+
+    socket.emit("document:join", { documentId: id });
+
+    return () => {
+      socket.emit("document:leave", { documentId: id });
+    };
+  }, [id, socket]);
+
+  useEffect(() => {
     const loadDocumentData = async () => {
       if (!isInitialMount.current || !id) return;
       isInitialMount.current = false;
