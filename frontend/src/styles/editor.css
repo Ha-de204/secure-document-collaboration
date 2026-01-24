@@ -959,9 +959,10 @@ ul[class^="bullet-variant"] > li::before {
 
 /* 7. Blocks văn bản */
 .block-wrapper {
-    margin-bottom: 2px;
+    margin-bottom: 7px;
     position: relative;
     transition: all 0.2s ease;
+    border: 1px solid #d7d7d7;
 }
 
 .block-content {

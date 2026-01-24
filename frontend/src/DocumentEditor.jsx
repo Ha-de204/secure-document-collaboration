@@ -71,9 +71,10 @@ const DocumentEditor = ({ onLogout, socket }) => {
 
   useEffect(() => {
     const loadDocumentData = async () => {
-      if (!isInitialMount.current || !id) return;
-      isInitialMount.current = false;
-      
+      if (!id) return;
+      setBlocks([]); 
+      setSavingStatus('loading');
+
       try {
         let localDoc = await getLocalDocument(id);
 
@@ -118,24 +119,33 @@ const DocumentEditor = ({ onLogout, socket }) => {
             setDrk(decryptedDRK);
 
             const latestBlocks = await getLatestBlocksLocal(id);
-            const decryptedBlocks = await Promise.all(latestBlocks.map(async (b) => {
-              try {
-                const dataToDecrypt = b.cipherText || b.content || "";
-                let plainText = "";
+            
+            // Nếu là doc mới tạo, block rỗng
+            if (latestBlocks.length === 0) {
+              setBlocks([]);
+              addToHistory([]);
+            } else {
+              const decryptedBlocks = await Promise.all(latestBlocks.map(async (b) => {
+                try {
+                  const dataToDecrypt = b.cipherText || b.content || "";
+                  let plainText = "";
 
-                if (dataToDecrypt && typeof dataToDecrypt === 'string' && dataToDecrypt.includes(':')) {
-                  plainText = await BlockCryptoModule.decryptBlock(dataToDecrypt, decryptedDRK);
-                  return { ...b, content: plainText, id: b.blockId, blockId: b.blockId, };
+                  if (dataToDecrypt && typeof dataToDecrypt === 'string' && dataToDecrypt.includes(':')) {
+                    const [ivPart, cipherPart] = dataToDecrypt.split(':');
+                    plainText = await BlockCryptoModule.decryptBlock(cipherPart, ivPart, decryptedDRK, b.blockId);
+                    return { ...b, content: plainText, id: b.blockId, blockId: b.blockId, };
+                  }
+
+                  
+                  return { ...b, content: b.content || "", id: b.blockId, blockId: b.blockId, };
+                } catch (e) {
+                  return { ...b, content: "[Lỗi giải mã]", id: b.blockId };
                 }
-
-                
-                return { ...b, content: b.content || "", id: b.blockId, blockId: b.blockId, };
-              } catch (e) {
-                return { ...b, content: "[Lỗi giải mã]", id: b.blockId };
-              }
-            }));
-            setBlocks(decryptedBlocks);
-            addToHistory(decryptedBlocks);
+              }));
+              setBlocks(decryptedBlocks);
+              addToHistory(decryptedBlocks);
+            }
+            setSavingStatus('saved');
           }
         }
       } catch (err) {
@@ -183,10 +193,22 @@ const DocumentEditor = ({ onLogout, socket }) => {
   });
   
     socket.on("block:update", async (payload) => {
-      const plainText = await cryptoRef.current.decryptBlock(payload.cipherText, drk);
-      setBlocks(prev =>
-        prev.map(b => b.id === payload.blockId ? { ...b, content: plainText } : b)
-      );
+      if (payload.cipherText && payload.cipherText.includes(':')) {
+        const [iv, cipher] = payload.cipherText.split(':');
+        const plainText = await cryptoRef.current.decryptBlock(
+          cipher, 
+          iv, 
+          drk, 
+          payload.blockId
+        );
+        
+        setBlocks(prev =>
+          prev.map(b => (b.blockId === payload.blockId || b.id === payload.blockId) 
+            ? { ...b, content: plainText } 
+            : b
+          )
+        );
+      }
     });
 
     socket.on("block:create", payload => {

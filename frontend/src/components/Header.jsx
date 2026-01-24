@@ -286,11 +286,14 @@ export const Header = ({ title, onTitleChange, savingStatus, onNewDocument, onUn
     if (!sel.rangeCount) return;
 
     // 2. Kiểm tra xem vùng chọn có nằm trong đúng Block đang Active không
-    const activeBlockElement = sel.anchorNode.parentElement?.closest('.block-contenteditable');
-      
+    const anchorNode = sel.anchorNode;
+    const activeBlockElement = anchorNode.nodeType === 1 
+      ? anchorNode.closest('.block-contenteditable') 
+      : anchorNode.parentElement?.closest('.block-contenteditable');
+
     if (activeBlockId && activeBlockElement) {
       const elementId = activeBlockElement.getAttribute('data-id'); 
-      if (elementId && elementId !== activeBlockId) {
+      if (activeBlockId && elementId !== activeBlockId) {
         console.warn("Hành động bị chặn: Vùng chọn không khớp với block đang active");
         setShowBulletMenu(false);
         setShowNumberMenu(false);
@@ -299,13 +302,16 @@ export const Header = ({ title, onTitleChange, savingStatus, onNewDocument, onUn
     }
 
       // 3. Thực thi lệnh tạo danh sách
+    document.execCommand('styleWithCSS', false, false);
     document.execCommand(command, false, null);
 
       // 4. Tìm thẻ UL/OL vừa tạo để áp dụng style/class
     setTimeout(() => {
       const currentSel = window.getSelection();
+      if (!currentSel.rangeCount) return;
+
       let list = currentSel.anchorNode;
-      while (list && !['UL', 'OL'].includes(list.nodeName)) {
+      while (list && list !== activeBlockElement && !['UL', 'OL'].includes(list.nodeName)) {
         list = list.parentNode;
         if (list?.classList?.contains('block-contenteditable')) break;
       }
