@@ -7,7 +7,7 @@ import './styles/editor.css';
 import { useParams, useNavigate } from 'react-router-dom';
 import BlockCryptoModule from "./crypto/BlockManager";
 import { getDB } from './storage/indexDbService';
-import { getPublicKey } from './services/PublicKeyService';
+import { getPublicKey, savePublicKey } from './services/PublicKeyService';
 import { saveMyKey, getMyKey } from './services/IdentityKy';
 import { createBlockVersionLocal, getLatestBlocksLocal } from './services/BlockService';
 import DocumentKeyService from './services/DRKService';
@@ -21,6 +21,23 @@ import {
   decodeBuffer,
   getRandomBytes
 } from "./crypto/lib";
+import{
+  genRandomSalt, // sinh salt
+  cryptoKeyToJSON, 
+  generateEG, // sinh khoa eg cho double ratchet
+  computeDH, // tinh dh 
+  verifyWithECDSA, // xac thuc bang khoa identity
+  HMACtoAESKey, // doubleratchet
+  HMACtoHMACKey, /// double ratchet
+  HKDF, // dan xuat khoa root va chian key (double ratchet)
+  encryptWithGCM, // ma hoa aes-gcm
+  decryptWithGCM, // giai ma
+  generateECDSA, // sinh khoa identity
+  signWithECDSA, // ki bang khoa identity
+  encryptRSA,
+  decryptRSA,
+  generateRSA
+} from './crypto/lib2';
 
 const DocumentEditor = ({ onLogout, socket }) => {
   const { id } = useParams();
@@ -87,14 +104,14 @@ const DocumentEditor = ({ onLogout, socket }) => {
       });
       const data = await res.json();
       document = data.data;
+      // bao k ton tai
+      if(!document) {
+        alert("Document không tồn tại hoặc đã bị xóa trên server.");
+        throw new Error("Document không tồn tại hoặc đã bị xóa trên server.");
+      }
+      await saveDocumentLocally(document);
+      
     }
-
-    // bao k ton tai
-    if(!document) {
-      alert("Document không tồn tại hoặc đã bị xóa trên server.");
-      throw new Error("Document không tồn tại hoặc đã bị xóa trên server.");
-    }
-    // lay public key owner
     // lay ownerPublicKey
     let ownerPublicKey = await getPublicKey(document.ownerId);
     if(!ownerPublicKey) {
@@ -107,15 +124,21 @@ const DocumentEditor = ({ onLogout, socket }) => {
       });
       const userData = await userRes.json();
       ownerPublicKey = userData.data?.identityKey || userData.data?.IdentityKey;
+      if(!ownerPublicKey){
+      throw new Error("Không lấy được Public Key của chủ sở hữu tài liệu.");
+      }
       setPublicKey(prevMap => {
         const updatedMap = new Map(prevMap);
         updatedMap.set(userData.data._id, ownerPublicKey);
         return updatedMap;
       })
+      savePublicKey({
+        userId: document.ownerId,
+        userName: userData.data.userName,
+        publicKey: ownerPublicKey
+      });
     }
-    if(!ownerPublicKey){
-      throw new Error("Không lấy được Public Key của chủ sở hữu tài liệu.");
-    }
+    
 
     const response = await fetch(`${process.env.REACT_APP_API_URL}/blocks/lastest-version/${docID}`, {
       method: 'GET',
@@ -124,7 +147,7 @@ const DocumentEditor = ({ onLogout, socket }) => {
           'Authorization': `Bearer ${token}`
         }
       });
-    const serverBlocks = await response.json();
+    const serverBlocks = (await response.json()).data;
 
     const localBlocks = await getLatestBlocksLocal(docID);
 
@@ -136,7 +159,11 @@ const DocumentEditor = ({ onLogout, socket }) => {
       if (!lBlock || sMeta.version > lBlock.version) {
 
         console.log(`Đồng bộ lịch sử block ${sMeta.blockId} từ Server...`);
-        const startVersion = lBlock ? (lBlock.version + 1 ): 0;
+        const startVersion = lBlock ? (lBlock.version + 1 ): 1;
+        const versions = Array.from(
+          { length: sMeta.version - startVersion + 1 }, 
+          (_, i) => startVersion + i
+        );
         const blockId = sMeta.blockId;
         const versionOfBlock = await fetch(`${process.env.REACT_APP_API_URL}/blocks/versions/${blockId}`, {
           method: 'POST',
@@ -144,7 +171,7 @@ const DocumentEditor = ({ onLogout, socket }) => {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${token}`
           },
-          body: JSON.stringify({ versions: Array.from({ length: sMeta.version - startVersion }, (_, i) => startVersion + i)})
+          body: JSON.stringify(versions)
           });
           const freshBlock = await versionOfBlock.json();
           // ktra day version nhan dc (neu dung thi luu trong indexdb)
@@ -235,12 +262,13 @@ const DocumentEditor = ({ onLogout, socket }) => {
 
   useEffect(() => {
     const loadDocumentData = async () => {
+      if (!id) return;
+      setBlocks([]); 
+      setSavingStatus('loading');
 
-      if (!isInitialMount.current || !id) return;
-      isInitialMount.current = false;
-      
       try {
-        syncWithServer(id);
+        await syncWithServer(id);
+
         let localDoc = await getLocalDocument(id);
 
         if (!localDoc) {
@@ -282,26 +310,34 @@ const DocumentEditor = ({ onLogout, socket }) => {
                 keyData.encryptedDRK
             );
             setDrk(decryptedDRK);
-          const { ephemeralPubKey, iv, cipherText } = JSON.parse(keyData.encryptedDRK);
             const latestBlocks = await getLatestBlocksLocal(id);
-            const decryptedBlocks = await Promise.all(latestBlocks.map(async (b) => {
-              try {
-                const dataToDecrypt = b.cipherText || b.content || "";
-                let plainText = "";
+            
+            // Nếu là doc mới tạo, block rỗng
+            if (latestBlocks.length === 0) {
+              setBlocks([]);
+              addToHistory([]);
+            } else {
+              const decryptedBlocks = await Promise.all(latestBlocks.map(async (b) => {
+                try {
+                  const dataToDecrypt = b.cipherText || b.content || "";
+                  let plainText = "";
 
-                if (dataToDecrypt && typeof dataToDecrypt === 'string' && dataToDecrypt.includes(':')) {
-                  plainText = await BlockCryptoModule.decryptBlock(dataToDecrypt, encodeBuffer(stringToBuffer(iv)),decryptedDRK, b.blockId);
-                  return { ...b, content: plainText, id: b.blockId, blockId: b.blockId, };
+                  if (dataToDecrypt && typeof dataToDecrypt === 'string' && dataToDecrypt.includes(':')) {
+                    const [ivPart, cipherPart] = dataToDecrypt.split(':');
+                    plainText = await BlockCryptoModule.decryptBlock(cipherPart, ivPart, decryptedDRK, b.blockId);
+                    return { ...b, content: plainText, id: b.blockId, blockId: b.blockId, };
+                  }
+
+                  
+                  return { ...b, content: b.content || "", id: b.blockId, blockId: b.blockId, };
+                } catch (e) {
+                  return { ...b, content: "[Lỗi giải mã]", id: b.blockId };
                 }
-
-                
-                return { ...b, content: b.content || "", id: b.blockId, blockId: b.blockId, };
-              } catch (e) {
-                return { ...b, content: "[Lỗi giải mã]", id: b.blockId };
-              }
-            }));
-            setBlocks(decryptedBlocks);
-            addToHistory(decryptedBlocks);
+              }));
+              setBlocks(decryptedBlocks);
+              addToHistory(decryptedBlocks);
+            }
+            setSavingStatus('saved');
           }
         }
       } catch (err) {
@@ -349,10 +385,22 @@ const DocumentEditor = ({ onLogout, socket }) => {
   });
   
     socket.on("block:update", async (payload) => {
-      const plainText = await cryptoRef.current.decryptBlock(payload.cipherText, drk);
-      setBlocks(prev =>
-        prev.map(b => b.id === payload.blockId ? { ...b, content: plainText } : b)
-      );
+      if (payload.cipherText && payload.cipherText.includes(':')) {
+        const [iv, cipher] = payload.cipherText.split(':');
+        const plainText = await cryptoRef.current.decryptBlock(
+          cipher, 
+          iv, 
+          drk, 
+          payload.blockId
+        );
+        
+        setBlocks(prev =>
+          prev.map(b => (b.blockId === payload.blockId || b.id === payload.blockId) 
+            ? { ...b, content: plainText } 
+            : b
+          )
+        );
+      }
     });
 
     socket.on("block:create", payload => {

@@ -140,7 +140,8 @@ const getBlocks = async (
       status: false,
       error: 'FORBIDDEN_ACCESS'
     }
-  const userKeyEntry = await DocKey.findOne({
+    //const epochsInBlocks = [...new Set(blocks.map(b => b.epoch))];
+  const userKeyEntry = await DocKey.find({
     documentId: blocks[0].documentId,
     userId: userId
   }).lean();
@@ -149,7 +150,7 @@ const getBlocks = async (
     status: true,
     data: {
       blocks: blocks,
-      userKeyEntry: userKeyEntry || null
+      keys: userKeyEntry || null
       }
   }
 }

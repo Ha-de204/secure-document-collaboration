@@ -317,6 +317,7 @@ const BlockCryptoModule = {
 
   async vertifyBlock(block,drk){
     // lay block moi nhat trong local
+    
     const lastBlock = await getLatestVersion(block.blockId)
     if(lastBlock.version >= block.version){
       return {
@@ -341,6 +342,7 @@ const BlockCryptoModule = {
   
   // vertify 1 dai version cua 1 block vs chung blockId
   async verifyBatchBlocks(payload,lastestLocalBlock, ownerPublicKey) {
+  const userName = localStorage.getItem('userName');
   const { blocks, keys } = payload.data;
   if (!blocks || blocks.length === 0) return { status: true };
 
@@ -349,7 +351,7 @@ const BlockCryptoModule = {
   const anchorBlock = lastestLocalBlock;
   let lastHash = anchorBlock ? anchorBlock.hash : "0";
   let lastVersion = anchorBlock ? anchorBlock.version : -1;
-  var myPrivateKey = await getMyKey();
+  var myPrivateKey = await getMyKey(userName);
 
   const pubKeys = await this.vertifyPublicKey(keys, myPrivateKey, ownerPublicKey)
   const verifiedData = [];
