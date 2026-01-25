@@ -120,12 +120,20 @@ const DocumentEditor = ({ onLogout, socket }) => {
               const res = await axios.get(`${process.env.REACT_APP_API_URL}/users/${keyData.signedBy}`);
               const pubKeyString = res.data.data?.identityKey;
               
-              signerKeyInfo = {
-                publicKey: await BlockCryptoModule.importPublicKey(pubKeyString)
-              };
+              const importedKey = await BlockCryptoModule.importPublicKey(pubKeyString);
+              signerKeyInfo = { publicKey: importedKey };
+
+              await db.put('publicKeys', {
+                userId: keyData.signedBy,
+                publicKey: pubKeyString, 
+                createdAt: new Date()
+              });
             }
+            const dataToVerify = `doc:${id}|epoch:${keyData.epoch}|drk:${keyData.encryptedDRK}`;
+            console.log("Data to verify:", dataToVerify);
+            console.log("Signature to check:", keyData.signature);
             const isDRKValid = await BlockCryptoModule.verifySignature(
-              keyData.encryptedDRK, // Dữ liệu gốc đã ký
+              dataToVerify,
               keyData.signature,    // Chữ ký base64
               signerKeyInfo.publicKey // Public Key của người ký
             );
@@ -473,7 +481,6 @@ const DocumentEditor = ({ onLogout, socket }) => {
             return; 
         }
         const identityData = await unlockIdentity(currentUser, password); 
-        const signature = await BlockCryptoModule.signData(encryptedDRK, identityData.privateKey);
         
         const newDocData = {
           ownerId: userId,
@@ -499,6 +506,10 @@ const DocumentEditor = ({ onLogout, socket }) => {
         const docResult = await res.json();
         if (!res.ok) throw new Error(docResult.message || "Server từ chối tạo Document");
         const serverDocId = docResult.data._id;
+
+        // ký
+        const dataToSign = `doc:${serverDocId}|epoch:${0}|drk:${encryptedDRK}`;
+        const signature = await BlockCryptoModule.signData(dataToSign, identityData.privateKey);
 
         // luu khoa len server
         const keyRes = await fetch(`${process.env.REACT_APP_API_URL}/doc-keys`, {
