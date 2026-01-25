@@ -1,7 +1,6 @@
 'use strict'
 
-const crypto = require('node:crypto')
-const { subtle } = require('node:crypto').webcrypto
+const subtle = window.crypto.subtle;
 
 /// ////////////////////////////////////////////////////////////////////////////////
 // Cryptographic Primitives

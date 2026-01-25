@@ -82,7 +82,7 @@ export const Header = ({ title, onTitleChange, savingStatus, onNewDocument, onUn
     const newSize = parseInt(fontSize) + 1;
     handleSizeSelect(e, newSize);
   };
-
+  
   const handleDecrease = (e) => {
     e.preventDefault();
     saveSelection();
@@ -102,7 +102,7 @@ export const Header = ({ title, onTitleChange, savingStatus, onNewDocument, onUn
     onColorChange(color); 
     setShowColorMenu(false);
   };
-
+  
   // Xử lý chọn size chữ
   const handleSizeSelect = (e, size) => {
     if (e) {

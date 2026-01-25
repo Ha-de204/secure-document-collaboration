@@ -1,6 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 
-const EditorBlock = ({ block, onFocus, isFocused, fontFamily, onChange, onEnter, onBlur }) => {
+const EditorBlock = ({ block, onFocus, isFocused, fontFamily, onChange, onEnter, onBlur, socket }) => {
   const ref = useRef(null);
   const isResizing = useRef(false);
   const startX = useRef(0);
@@ -35,7 +35,9 @@ const EditorBlock = ({ block, onFocus, isFocused, fontFamily, onChange, onEnter,
     }
   }
 }, [isFocused, isLocked]);
-
+const invite = async () => {
+  
+}
   const handleInput = () => {
     if (isLocked) return;
     onChange(block.id, ref.current.innerHTML);

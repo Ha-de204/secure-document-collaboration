@@ -44,7 +44,7 @@ const BlockCryptoModule = {
   },
 
   /**
-   * Mã hóa dữ liệu bằng Public Key (RSA-OAEP)
+   * Mã hóa dữ liệu bằng Public Key 
    * @param {string} data - Dữ liệu thô cần mã hóa (rawDRK)
    */
 

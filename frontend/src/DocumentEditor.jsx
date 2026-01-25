@@ -8,11 +8,19 @@ import { useParams, useNavigate } from 'react-router-dom';
 import BlockCryptoModule from "./crypto/BlockManager";
 import { getDB } from './storage/indexDbService';
 import { getPublicKey } from './services/PublicKeyService';
+import { saveMyKey, getMyKey } from './services/IdentityKy';
 import { createBlockVersionLocal, getLatestBlocksLocal } from './services/BlockService';
 import DocumentKeyService from './services/DRKService';
 import { saveDocumentLocally, getLocalDocument } from './services/DocumentService';
 import axios from 'axios';
 import { unlockIdentity } from './crypto/IdentityManager';
+import {
+  stringToBuffer,
+  bufferToString,
+  encodeBuffer,
+  decodeBuffer,
+  getRandomBytes
+} from "./crypto/lib";
 
 const DocumentEditor = ({ onLogout, socket }) => {
   const { id } = useParams();
@@ -66,16 +74,19 @@ const DocumentEditor = ({ onLogout, socket }) => {
 
     setSavingStatus('syncing');
     // lay document 
-    let  document = await getDB().get('documents', docID);
+    const db = await getDB();
+    let document = await db.get('documents', docID);
     if (!document) {
       // load document metadata tu server
-      document = await fetch(`${process.env.REACT_APP_API_URL}/documents/${docID}`, {
+     const res = await fetch(`${process.env.REACT_APP_API_URL}/documents/${docID}`, {
       method: 'GET',
         headers: { 
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         }
       });
+      const data = await res.json();
+      document = data.data;
     }
 
     // bao k ton tai
@@ -126,8 +137,8 @@ const DocumentEditor = ({ onLogout, socket }) => {
 
         console.log(`Đồng bộ lịch sử block ${sMeta.blockId} từ Server...`);
         const startVersion = lBlock ? (lBlock.version + 1 ): 0;
-
-        const versionOfBlock = await fetch(`${process.env.REACT_APP_API_URL}/blocks/versions/${lBlock.blockId}`, {
+        const blockId = sMeta.blockId;
+        const versionOfBlock = await fetch(`${process.env.REACT_APP_API_URL}/blocks/versions/${blockId}`, {
           method: 'POST',
           headers: { 
             'Content-Type': 'application/json',
@@ -224,10 +235,12 @@ const DocumentEditor = ({ onLogout, socket }) => {
 
   useEffect(() => {
     const loadDocumentData = async () => {
+
       if (!isInitialMount.current || !id) return;
       isInitialMount.current = false;
       
       try {
+        syncWithServer(id);
         let localDoc = await getLocalDocument(id);
 
         if (!localDoc) {
@@ -257,10 +270,10 @@ const DocumentEditor = ({ onLogout, socket }) => {
               return;
             }
             const userName = localStorage.getItem('userName');
-            myPrivateKey = await unlockIdentity(userName, password);
+            myPrivateKey = (await unlockIdentity(userName, password)).privateKey;
             window.myPrivateKey = myPrivateKey;
           }
-
+           
           // Lấy lại khóa DRK từ Service
           const keyData = await DocumentKeyService.getLatestDRK(id);
           if (keyData && myPrivateKey) {
@@ -269,7 +282,7 @@ const DocumentEditor = ({ onLogout, socket }) => {
                 keyData.encryptedDRK
             );
             setDrk(decryptedDRK);
-
+          const { ephemeralPubKey, iv, cipherText } = JSON.parse(keyData.encryptedDRK);
             const latestBlocks = await getLatestBlocksLocal(id);
             const decryptedBlocks = await Promise.all(latestBlocks.map(async (b) => {
               try {
@@ -277,7 +290,7 @@ const DocumentEditor = ({ onLogout, socket }) => {
                 let plainText = "";
 
                 if (dataToDecrypt && typeof dataToDecrypt === 'string' && dataToDecrypt.includes(':')) {
-                  plainText = await BlockCryptoModule.decryptBlock(dataToDecrypt, decryptedDRK);
+                  plainText = await BlockCryptoModule.decryptBlock(dataToDecrypt, encodeBuffer(stringToBuffer(iv)),decryptedDRK, b.blockId);
                   return { ...b, content: plainText, id: b.blockId, blockId: b.blockId, };
                 }
 
@@ -544,7 +557,8 @@ const DocumentEditor = ({ onLogout, socket }) => {
         let publicKey = null;
 
         // kiem tra indexDB
-        const myIdentity = await db.get('identityKey', userName);
+        //const myIdentity = await db.get('identityKey', userName);
+        const myIdentity = await getMyKey(userName);
         if (myIdentity && myIdentity.publicKey) {
           publicKey = myIdentity.publicKey;
         } else {
@@ -556,18 +570,19 @@ const DocumentEditor = ({ onLogout, socket }) => {
         // Nếu vẫn không có, gọi API
         if (!publicKey) {
           const response = await axios.get(`${process.env.REACT_APP_API_URL}/users/${userId}`);
-          publicKey = response.data.data?.identityKey || response.data.data?.IdentityKey;
+          publicKey = response.data?.identityKey || response.data?.IdentityKey;
+          console.log(response)
         }
+        
 
         if (!publicKey) throw new Error("Không tìm thấy Public Key để mã hóa tài liệu.");
          // luu lai vao indexDB
-          await db.put("publicKeys", {
-            userId: userId,
-            userName: userName,
-            publicKey: publicKey,
-            createdAt: new Date()
-          });
-
+        //  await saveMyKey(userName, { 
+        //    userId: userId,
+        //     userName: userName,
+        //     publicKey: publicKey,
+        //     createdAt: new Date()
+        //   });
         // Ma hoa newDRK
         const encryptedDRK = await BlockCryptoModule.encryptWithPublicKey(publicKey, newDrk);
         console.log("Dữ liệu DRK đã mã hóa:", encryptedDRK);
@@ -703,6 +718,7 @@ const DocumentEditor = ({ onLogout, socket }) => {
               onEnter={() => handleAddBlock(index)}
               fontFamily={fontFamily} 
               formats={textFormats}
+              socket={ socket}
             />
           ))}
           <button className="add-block-btn" onClick={() => handleAddBlock(blocks.length - 1)}><Plus size={18} /> Add New Block</button>

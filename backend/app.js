@@ -83,11 +83,11 @@ app.use(function(err, req, res, next) {
     error: req.app.get('env') === 'development' ? err : {}
   })
 });
-/*
+
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
     console.log(`Server is running on: ${process.env.URL_BACKEND || 'http://localhost:' + PORT}`);
 });
-*/
+
 
 module.exports = { app, server };
