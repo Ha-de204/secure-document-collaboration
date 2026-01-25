@@ -112,6 +112,32 @@ const DocumentEditor = ({ onLogout, socket }) => {
           // Lấy lại khóa DRK từ Service
           const keyData = await DocumentKeyService.getLatestDRK(id);
           if (keyData && myPrivateKey) {
+            // xác thực chữ ký số
+            const db = await getDB();
+            let signerKeyInfo = await db.get('publicKeys', keyData.signedBy);
+            
+            if (!signerKeyInfo) {
+              const res = await axios.get(`${process.env.REACT_APP_API_URL}/users/${keyData.signedBy}`);
+              const pubKeyString = res.data.data?.identityKey;
+              
+              signerKeyInfo = {
+                publicKey: await BlockCryptoModule.importPublicKey(pubKeyString)
+              };
+            }
+            const isDRKValid = await BlockCryptoModule.verifySignature(
+              keyData.encryptedDRK, // Dữ liệu gốc đã ký
+              keyData.signature,    // Chữ ký base64
+              signerKeyInfo.publicKey // Public Key của người ký
+            );
+
+            if (!isDRKValid) {
+              console.error("❌ Chữ ký DRK không hợp lệ!");
+              alert("Cảnh báo: Khóa tài liệu (DRK) không hợp lệ hoặc đã bị giả mạo!");
+              setSavingStatus('error');
+              return; 
+            }
+            console.log("✅ Chữ ký DRK hợp lệ. Tiến hành giải mã...");
+
             const decryptedDRK = await BlockCryptoModule.decryptWithPrivateKey(
                 myPrivateKey, 
                 keyData.encryptedDRK

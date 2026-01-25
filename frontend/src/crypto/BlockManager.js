@@ -179,6 +179,49 @@ const BlockCryptoModule = {
       throw error;
     }
   },
+
+  async importPublicKey(publicKeyBase64) {
+    try {
+      const pubBuf = decodeBuffer(publicKeyBase64);
+      return await subtle.importKey(
+        "spki", 
+        pubBuf,
+        {
+          name: "ECDSA",
+          namedCurve: "P-256",
+        },
+        true, 
+        ["verify"] 
+      );
+    } catch (error) {
+      console.error("Lỗi khi import Public Key:", error);
+      throw error;
+    }
+  },
+
+  /* Ham xác thực chữ ký số */
+  async verifySignature(data, signatureBase64, publicKey) {
+    try {
+      const signatureBuf = decodeBuffer(signatureBase64);
+      const dataBuf = typeof data === 'string' ? stringToBuffer(data) : data;
+      
+      let cryptoPublicKey = publicKey;
+      if (typeof publicKey === 'string') {
+        cryptoPublicKey = await this.importPublicKey(publicKey);
+      }
+
+      const isValid = await subtle.verify(
+        { name: "ECDSA", hash: { name: "SHA-256" } },
+        cryptoPublicKey,
+        signatureBuf,
+        dataBuf
+      );
+      return isValid;
+    } catch (e) {
+      console.error("Xác thực chữ ký thất bại:", e);
+      return false;
+    }
+  },
   
   /**
    * Dẫn xuất khóa con từ Document Root Key (DRK)
