@@ -509,8 +509,10 @@ const isProcessing = useRef(false);
           });
 
            socket.emit("block:update", { documentId: id, blockId, cipherText: combined, epoch: blockToSave.epoch });
-
+          // luu tren server nua. thoi luu len server trc cho de
+          
            addToHistory(newBlocks);
+           
            setSavingStatus('saved');
         } catch (error) {
           console.error("Lỗi khi lưu block local:", error);
@@ -518,7 +520,7 @@ const isProcessing = useRef(false);
         }
       }
       
-    }, 1000);
+    }, 120000);
   };
 
   const handleAddBlock = async (index) => {
