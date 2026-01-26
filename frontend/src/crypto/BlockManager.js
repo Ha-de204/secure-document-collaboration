@@ -30,8 +30,7 @@ import{
   decryptRSA,
   generateRSA
 } from './lib2';
-import { version } from "react";
-
+import { initIdentity, unlockIdentity } from "../crypto/IdentityManager";
 const subtle = window.crypto.subtle;
 
 const BLOCK_KEY_LABEL = "BLOCK_ENCRYPTION_KEY";
@@ -317,7 +316,7 @@ const BlockCryptoModule = {
       version,
       epoch,
       cipherText,
-      prevHash = "GENESIS_BLOCK_HASH",
+      prevHash = "0",
     } = blockData;
     
     const hmacKey = await this._deriveKey(
@@ -384,7 +383,7 @@ const BlockCryptoModule = {
   },
   
   // vertify 1 dai version cua 1 block vs chung blockId
-  async verifyBatchBlocks(payload,lastestLocalBlock, ownerPublicKey) {
+  async verifyBatchBlocks(payload,lastestLocalBlock, ownerPublicKey, password) {
   const userName = localStorage.getItem('userName');
   const { blocks, keys } = payload.data;
   if (!blocks || blocks.length === 0) return { status: true };
@@ -396,7 +395,7 @@ const BlockCryptoModule = {
   let lastVersion = anchorBlock ? anchorBlock.version : -1;
   var myPrivateKey = await getMyKey(userName);
 
-  const pubKeys = await this.vertifyPublicKey(keys, myPrivateKey, ownerPublicKey)
+  const pubKeys = await this.vertifyPublicKey(keys, myPrivateKey.encryptedPrivateKey, ownerPublicKey)
   const verifiedData = [];
   
   for (const block of sortedBlocks) {
@@ -440,18 +439,18 @@ async  vertifyPublicKey(serverKeys, myPrivateKey, ownerPublicKey) {
 
   for (const k of serverKeys) {
 
-    const isValidSignature = await verifyWithECDSA(
-      ownerPublicKey,
-      `${k.documentId}|${k.userId}|${k.epoch}|${k.encryptedDocKey}`, // Data gốc
+    const isValidSignature = await BlockCryptoModule.verifySignature(
+      `doc:${k.documentId}|epoch:${k.epoch}|drk:${k.encryptedDocKey}`, // Data gốc
       k.signature, // Chữ ký từ server
+      ownerPublicKey
     );
 
     if (!isValidSignature) {
       console.error(`CẢNH BÁO: Khóa epoch ${k.epoch} bị giả mạo hoặc không rõ nguồn gốc!`);
       throw new Error("SECURITY_BREACH_DETECTED");
     }
-
-    const rawDRK = await decryptRSA( myPrivateKey, k.encryptedDocKey);
+     const rawPrivateKey = window.myPrivateKey
+    const rawDRK = await this.decryptWithPrivateKey( rawPrivateKey, k.encryptedDocKey);
     
     keyMap.set(k.epoch, rawDRK);
     // luu vao indexdb

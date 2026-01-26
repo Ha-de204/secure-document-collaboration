@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, version } from 'react';
 import { Plus } from 'lucide-react';
 import { Header } from './components/Header';
 import { Footer } from './components/Footer';
@@ -73,6 +73,7 @@ const DocumentEditor = ({ onLogout, socket }) => {
     strikethrough: false,
     color: '#000000'
   });
+  const drkMapRef = useRef(new Map());
 
   const cloneBlocks = (blocks) => blocks.map(b => ({ ...b }));
   
@@ -183,7 +184,7 @@ const DocumentEditor = ({ onLogout, socket }) => {
 
       }
     }
-
+/*
     for (const lBlock of localBlocks) {
       if (!processedBlockIds.has(lBlock.blockId)) {
         console.log(`Đẩy block mới tạo offline ${lBlock.blockId} lên Server...`);
@@ -229,7 +230,7 @@ const DocumentEditor = ({ onLogout, socket }) => {
         }
       }
     }
-
+*/
     // 5. Cập nhật UI
     const finalBlocks = await getLatestBlocksLocal(docID);
     setBlocks(finalBlocks);
@@ -259,15 +260,16 @@ const DocumentEditor = ({ onLogout, socket }) => {
       socket.emit("document:leave", { documentId: id });
     };
   }, [id, socket]);
-
+const isProcessing = useRef(false);
   useEffect(() => {
     const loadDocumentData = async () => {
       if (!id) return;
       setBlocks([]); 
       setSavingStatus('loading');
-
+      if (isProcessing.current) return;
+      isProcessing.current = true;
       try {
-        await syncWithServer(id);
+       
 
         let localDoc = await getLocalDocument(id);
 
@@ -295,47 +297,67 @@ const DocumentEditor = ({ onLogout, socket }) => {
             const password = prompt("Tài liệu này đã được mã hóa. Vui lòng nhập mật khẩu ví để mở khóa:");
             if (!password){
               navigate('/');
+              isProcessing.current = false;
               return;
             }
             const userName = localStorage.getItem('userName');
             myPrivateKey = (await unlockIdentity(userName, password)).privateKey;
             window.myPrivateKey = myPrivateKey;
           }
-           
-          // Lấy lại khóa DRK từ Service
-          const keyData = await DocumentKeyService.getLatestDRK(id);
-          if (keyData && myPrivateKey) {
+           await syncWithServer(id);
+          // Lấy tất cả epoch của doc
+          const allKeyRecords = await DocumentKeyService.getAllEpochsForDocument(id);
+          if (allKeyRecords.length === 0) throw new Error("Không tìm thấy khóa tài liệu");
+
             // xác thực chữ ký số
             const db = await getDB();
-            let signerKeyInfo = await db.get('publicKeys', keyData.signedBy);
-            
-            if (!signerKeyInfo) {
-              const res = await axios.get(`${process.env.REACT_APP_API_URL}/users/${keyData.signedBy}`);
-              const pubKeyString = res.data.data?.identityKey;
-              
-              signerKeyInfo = {
-                publicKey: await BlockCryptoModule.importPublicKey(pubKeyString)
-              };
-            }
-            const isDRKValid = await BlockCryptoModule.verifySignature(
-              keyData.encryptedDRK, // Dữ liệu gốc đã ký
-              keyData.signature,    // Chữ ký base64
-              signerKeyInfo.publicKey // Public Key của người ký
-            );
+            const drkMap = new Map();
 
-            if (!isDRKValid) {
-              console.error("❌ Chữ ký DRK không hợp lệ!");
-              alert("Cảnh báo: Khóa tài liệu (DRK) không hợp lệ hoặc đã bị giả mạo!");
-              setSavingStatus('error');
-              return; 
-            }
-            console.log("✅ Chữ ký DRK hợp lệ. Tiến hành giải mã...");
+            for (const keyData of allKeyRecords) {
+              let signerKeyInfo = await db.get('publicKeys', keyData.signedBy);
+              if (!signerKeyInfo) {
+                try {
+                  const res = await axios.get(`${process.env.REACT_APP_API_URL}/users/${keyData.signedBy}`);
+                  const pubKeyString = res.data.data?.identityKey;
+                  const importedKey = await BlockCryptoModule.importPublicKey(pubKeyString);
+                  signerKeyInfo = { publicKey: importedKey };
 
-            const decryptedDRK = await BlockCryptoModule.decryptWithPrivateKey(
+                  await db.put('publicKeys', {
+                    userId: keyData.signedBy,
+                    publicKey: pubKeyString,
+                    createdAt: new Date()
+                  });
+                } catch(apiErr) {
+                  console.error(`Không thể lấy khóa của người ký ${keyData.signedBy}`);
+                  continue;
+                }
+              }
+              const dataToVerify = `doc:${id}|epoch:${keyData.epoch}|drk:${keyData.encryptedDRK}`;
+              console.log("Data to verify:", dataToVerify);
+              console.log("Signature to check:", keyData.signature);
+              const isDRKValid = await BlockCryptoModule.verifySignature(
+                dataToVerify,
+                keyData.signature,    // Chữ ký base64
+                signerKeyInfo.publicKey // Public Key của người ký
+              );
+              if (!isDRKValid) {
+                console.error("❌ Chữ ký DRK không hợp lệ!");
+                alert("Cảnh báo: Khóa tài liệu (DRK) không hợp lệ hoặc đã bị giả mạo!");
+                setSavingStatus('error');
+                return; 
+              }
+              console.log("✅ Chữ ký DRK hợp lệ. Tiến hành giải mã...");
+
+              const decryptedDRK = await BlockCryptoModule.decryptWithPrivateKey(
                 myPrivateKey, 
                 keyData.encryptedDRK
-            );
-            setDrk(decryptedDRK);
+              );
+              drkMap.set(keyData.epoch, decryptedDRK);
+            }
+            const latestKeyRecord = allKeyRecords[0];
+            drkMapRef.current = drkMap;
+            setDrk(drkMap.get(latestKeyRecord.epoch));
+
             const latestBlocks = await getLatestBlocksLocal(id);
             
             // Nếu là doc mới tạo, block rỗng
@@ -350,7 +372,14 @@ const DocumentEditor = ({ onLogout, socket }) => {
 
                   if (dataToDecrypt && typeof dataToDecrypt === 'string' && dataToDecrypt.includes(':')) {
                     const [ivPart, cipherPart] = dataToDecrypt.split(':');
-                    plainText = await BlockCryptoModule.decryptBlock(cipherPart, ivPart, decryptedDRK, b.blockId);
+                    const blockDRK = drkMap.get(b.epoch || 0);
+
+                    if (!blockDRK) {
+                      console.warn(`Thiếu khóa cho epoch ${b.epoch} của block ${b.blockId}`);
+                      return { ...b, content: "[Nội dung bị khóa hoặc chưa có quyền đọc]", id: b.blockId };
+                    }
+
+                    plainText = await BlockCryptoModule.decryptBlock(cipherPart, ivPart, blockDRK, b.blockId);
                     return { ...b, content: plainText, id: b.blockId, blockId: b.blockId, };
                   }
 
@@ -364,7 +393,7 @@ const DocumentEditor = ({ onLogout, socket }) => {
               addToHistory(decryptedBlocks);
             }
             setSavingStatus('saved');
-          }
+          
         }
       } catch (err) {
         if (err.response && err.response.status === 404) {
@@ -411,21 +440,34 @@ const DocumentEditor = ({ onLogout, socket }) => {
   });
   
     socket.on("block:update", async (payload) => {
+      if (payload.blockId === activeBlockId) return;
+      
       if (payload.cipherText && payload.cipherText.includes(':')) {
         const [iv, cipher] = payload.cipherText.split(':');
-        const plainText = await cryptoRef.current.decryptBlock(
-          cipher, 
-          iv, 
-          drk, 
-          payload.blockId
-        );
-        
-        setBlocks(prev =>
-          prev.map(b => (b.blockId === payload.blockId || b.id === payload.blockId) 
-            ? { ...b, content: plainText } 
-            : b
-          )
-        );
+        const blockEpoch = payload.epoch ?? 0; 
+        const correctDrk = drkMapRef.current.get(blockEpoch);
+        if (!correctDrk) {
+          console.error(`Không tìm thấy khóa cho Epoch ${blockEpoch} để giải mã update.`);
+          return;
+        }
+
+       try {
+          const plainText = await cryptoRef.current.decryptBlock(
+            cipher, 
+            iv, 
+            correctDrk, 
+            payload.blockId
+          );
+          
+          setBlocks(prev =>
+            prev.map(b => (b.blockId === payload.blockId || b.id === payload.blockId) 
+              ? { ...b, content: plainText, epoch: blockEpoch } // Cập nhật cả nội dung và epoch mới nhất
+              : b
+            )
+          );
+        } catch (err) {
+          console.error("Lỗi giải mã block từ socket:", err);
+        }
       }
     });
 
@@ -461,11 +503,12 @@ const DocumentEditor = ({ onLogout, socket }) => {
 
           await createBlockVersionLocal(userId, {
             ...blockToSave,
+            epoch: blockToSave.epoch,
             version: (blockToSave.version || 1) + 1,
             cipherText: combined
           });
 
-           socket.emit("block:update", { documentId: id, blockId, ciphertext: combined });
+           socket.emit("block:update", { documentId: id, blockId, cipherText: combined, epoch: blockToSave.epoch });
 
            addToHistory(newBlocks);
            setSavingStatus('saved');
@@ -493,6 +536,7 @@ const DocumentEditor = ({ onLogout, socket }) => {
 
       const newUUID = crypto.randomUUID();
       const initialVersion = 1;
+      const latestKey = await DocumentKeyService.getLatestDRK(id);
 
       const encrypted = await BlockCryptoModule.encryptBlock("", drk, newUUID);
       const combinedCipherText = `${encrypted.iv}:${encrypted.cipherText}`;
@@ -506,11 +550,15 @@ const DocumentEditor = ({ onLogout, socket }) => {
         prevHash: "0",
         hash: await BlockCryptoModule.calculateBlockHash({
           blockId: newUUID,
+          authorId: userId,
+          documentId: currentServerDocId,
+          index: Number(index + 1),
+          version: initialVersion,
+          epoch: latestKey.epoch,
           cipherText: combinedCipherText,
-          prevHash: "0",
-          version: initialVersion
+          prevHash: "0"
         }, drk),
-        epoch: 0
+        epoch: latestKey.epoch
       };
 
       // gui data len server
@@ -667,7 +715,6 @@ const DocumentEditor = ({ onLogout, socket }) => {
             return; 
         }
         const identityData = await unlockIdentity(currentUser, password); 
-        const signature = await BlockCryptoModule.signData(encryptedDRK, identityData.privateKey);
         
         const newDocData = {
           ownerId: userId,
@@ -693,6 +740,10 @@ const DocumentEditor = ({ onLogout, socket }) => {
         const docResult = await res.json();
         if (!res.ok) throw new Error(docResult.message || "Server từ chối tạo Document");
         const serverDocId = docResult.data._id;
+
+        // ký
+        const dataToSign = `doc:${serverDocId}|epoch:${0}|drk:${encryptedDRK}`;
+        const signature = await BlockCryptoModule.signData(dataToSign, identityData.privateKey);
 
         // luu khoa len server
         const keyRes = await fetch(`${process.env.REACT_APP_API_URL}/doc-keys`, {
