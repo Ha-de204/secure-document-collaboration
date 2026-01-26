@@ -325,7 +325,7 @@ const BlockCryptoModule = {
     return String(val);
   };
   
-    // Chuẩn hóa tất cả các ID
+    //Chuẩn hóa tất cả các ID
     const blockIdStr = getIdString(blockId);
     const authorIdStr = getIdString(authorId);
     const docIdStr = getIdString(documentId);
@@ -334,7 +334,9 @@ const BlockCryptoModule = {
       drk, INTEGRITY_KEY_LABEL, blockIdStr, 
       ["sign"], { name: "HMAC", hash: "SHA-256" }
     );
+
     const message = stringToBuffer(`${blockIdStr}|${authorIdStr}|${docIdStr}|${index}|${version}|${epoch}|${cipherText}|${prevHash}`);
+    console.log("DEBUG MESSAGE STRING:", message);
     const signature = await subtle.sign({ name: "HMAC" }, hmacKey, message);
     console.log("STRING_TO_HASH:", message);
     console.log("key: ", drk)
