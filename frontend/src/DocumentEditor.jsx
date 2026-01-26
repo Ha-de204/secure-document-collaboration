@@ -690,7 +690,6 @@ const DocumentEditor = ({ onLogout, socket }) => {
       const newBlockForUI = { 
         ...blockData, 
         content: "", 
-        id: newUUID,
         status: 'saved' 
       };
       const newBlocksArray = [...blocks];
