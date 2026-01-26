@@ -318,13 +318,23 @@ const BlockCryptoModule = {
       cipherText,
       prevHash = "0",
     } = blockData;
+    const getIdString = (val) => {
+    if (typeof val === 'object' && val !== null) {
+      return val._id ? String(val._id) : String(val);
+    }
+    return String(val);
+  };
+  
+    // Chuẩn hóa tất cả các ID
+    const blockIdStr = getIdString(blockId);
+    const authorIdStr = getIdString(authorId);
+    const docIdStr = getIdString(documentId);
     
     const hmacKey = await this._deriveKey(
-      drk, INTEGRITY_KEY_LABEL, blockId, 
+      drk, INTEGRITY_KEY_LABEL, blockIdStr, 
       ["sign"], { name: "HMAC", hash: "SHA-256" }
     );
-
-    const message = stringToBuffer(`${blockId}|${authorId}|${documentId}|${index}|${version}|${epoch}|${cipherText}|${prevHash}`);
+    const message = stringToBuffer(`${blockIdStr}|${authorIdStr}|${docIdStr}|${index}|${version}|${epoch}|${cipherText}|${prevHash}`);
     const signature = await subtle.sign({ name: "HMAC" }, hmacKey, message);
     console.log("STRING_TO_HASH:", message);
     console.log("key: ", drk)
@@ -411,9 +421,11 @@ const BlockCryptoModule = {
     }
 
     const currentDRK = pubKeys.get(block.epoch);
+
+    
     const expectedHash = await this.calculateBlockHash({
       blockId: block.blockId,
-      documentId: block.documentId._id,
+      documentId: block.documentId,
       authorId: block.authorId,
       index: block.index,
       version: block.version,
