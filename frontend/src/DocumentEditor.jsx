@@ -4,12 +4,12 @@ import { Header } from './components/Header';
 import { Footer } from './components/Footer';
 import EditorBlock from './components/EditorBlock';
 import './styles/editor.css';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, data } from 'react-router-dom';
 import BlockCryptoModule from "./crypto/BlockManager";
 import { getDB } from './storage/indexDbService';
 import { getPublicKey, savePublicKey } from './services/PublicKeyService';
 import { saveMyKey, getMyKey } from './services/IdentityKy';
-import { createBlockVersionLocal, getLatestBlocksLocal } from './services/BlockService';
+import { createBlockVersionLocal, getLatestBlocksLocal, saveServerResponseToLocal } from './services/BlockService';
 import DocumentKeyService from './services/DRKService';
 import { saveDocumentLocally, getLocalDocument } from './services/DocumentService';
 import axios from 'axios';
@@ -179,7 +179,7 @@ const DocumentEditor = ({ onLogout, socket }) => {
         const valid = await BlockCryptoModule.verifyBatchBlocks(freshBlock,lBlock,ownerPublicKey);
         // cap nhat block moi nhat
         if (valid.status) {
-
+          
         }
 
       }
@@ -510,7 +510,7 @@ const isProcessing = useRef(false);
 
            socket.emit("block:update", { documentId: id, blockId, cipherText: combined, epoch: blockToSave.epoch });
           // luu tren server nua. thoi luu len server trc cho de
-          
+
            addToHistory(newBlocks);
            
            setSavingStatus('saved');
@@ -545,6 +545,7 @@ const isProcessing = useRef(false);
 
       const blockData = {
         blockId: String(newUUID),
+        authorId: userId,
         documentId: currentServerDocId,
         index: Number(index + 1),
         version: initialVersion,

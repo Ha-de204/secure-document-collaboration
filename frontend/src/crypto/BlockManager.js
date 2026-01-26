@@ -326,7 +326,8 @@ const BlockCryptoModule = {
 
     const message = stringToBuffer(`${blockId}|${authorId}|${documentId}|${index}|${version}|${epoch}|${cipherText}|${prevHash}`);
     const signature = await subtle.sign({ name: "HMAC" }, hmacKey, message);
-
+    console.log("STRING_TO_HASH:", message);
+    console.log("key: ", drk)
     return encodeBuffer(signature);
   },
 
@@ -383,7 +384,7 @@ const BlockCryptoModule = {
   },
   
   // vertify 1 dai version cua 1 block vs chung blockId
-  async verifyBatchBlocks(payload,lastestLocalBlock, ownerPublicKey, password) {
+  async verifyBatchBlocks(payload,lastestLocalBlock, ownerPublicKey) {
   const userName = localStorage.getItem('userName');
   const { blocks, keys } = payload.data;
   if (!blocks || blocks.length === 0) return { status: true };
@@ -410,7 +411,16 @@ const BlockCryptoModule = {
     }
 
     const currentDRK = pubKeys.get(block.epoch);
-    const expectedHash = await this.calculateBlockHash(block, currentDRK);
+    const expectedHash = await this.calculateBlockHash({
+      blockId: block.blockId,
+      documentId: block.documentId._id,
+      authorId: block.authorId,
+      index: block.index,
+      version: block.version,
+      epoch: block.epoch,
+      cipherText: block.cipherText,
+      prevHash: block.prevHash
+    }, currentDRK);
     
     if (block.hash !== expectedHash) {
       return { status: false, error: 'HASH_MISMATCH', version: block.version };
