@@ -54,8 +54,8 @@ const DocumentEditor = ({ onLogout, socket }) => {
   const [activeBlockId, setActiveBlockId] = useState(null);
   // History management
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [history, setHistory] = useState([[ { ...blocks[0] } ]]);
-  const [publicKey, setPublicKey] = useState({});
+  const [history, setHistory] = useState([[]]);
+   const [publicKey, setPublicKey] = useState({});
 
   const isRestoringHistory = useRef(false);
   const [zoom, setZoom] = useState(100);
@@ -63,7 +63,7 @@ const DocumentEditor = ({ onLogout, socket }) => {
   const [fontSize, setFontSize] = useState(11);
   const historyTimer = useRef(null);
   const historyRef = useRef(history);
-  const indexRef = useRef(currentIndex);
+  const indexRef = useRef(0);
   const blocksRef = useRef(blocks);
   const hasPendingHistory = useRef(false);
   const [textFormats, setTextFormats] = useState({
@@ -79,14 +79,21 @@ const DocumentEditor = ({ onLogout, socket }) => {
   
   const addToHistory = useCallback((newBlocks) => {
     setHistory(prev => {
-      const newHistory = prev.slice(0, currentIndex + 1);
+      const currentIdx = indexRef.current;
+      const cleanHistory = prev.slice(0, currentIdx + 1);
+
       const entry = JSON.parse(JSON.stringify(newBlocks));
-      const finalHistory = [...newHistory, entry];
-      return finalHistory.slice(-30);
+      const finalHistory = [...cleanHistory, entry].slice(-50);
+      
+      const newIdx = finalHistory.length - 1;
+      indexRef.current = newIdx;
+      setCurrentIndex(newIdx);
+
+      return finalHistory;
     });
-    setCurrentIndex(prev => prev + 1);
-  }, [currentIndex]);
-  const syncWithServer = async (docID) => {
+  }, []);
+
+ const syncWithServer = async (docID) => {
   try {
     const token = localStorage.getItem('accessToken');
 
@@ -241,15 +248,6 @@ const DocumentEditor = ({ onLogout, socket }) => {
     setSavingStatus('error');
   }
 };
-  useEffect(() => {
-    if (!id || !socket) return;
-
-    socket.emit("document:join", { documentId: id });
-
-    return () => {
-      socket.emit("document:leave", { documentId: id });
-    };
-  }, [id, socket]);
 
   useEffect(() => {
     if (!id || !socket) return;
@@ -260,7 +258,19 @@ const DocumentEditor = ({ onLogout, socket }) => {
       socket.emit("document:leave", { documentId: id });
     };
   }, [id, socket]);
-const isProcessing = useRef(false);
+
+  useEffect(() => {
+    if (!id || !socket) return;
+
+    socket.emit("document:join", { documentId: id });
+
+    return () => {
+      socket.emit("document:leave", { documentId: id });
+    };
+  }, [id, socket]);
+
+  const isProcessing = useRef(false);
+
   useEffect(() => {
     const loadDocumentData = async () => {
       if (!id) return;
@@ -389,8 +399,16 @@ const isProcessing = useRef(false);
                   return { ...b, content: "[Lỗi giải mã]", id: b.blockId };
                 }
               }));
-              setBlocks(decryptedBlocks);
-              addToHistory(decryptedBlocks);
+
+              if (decryptedBlocks.length > 0) {
+                setBlocks(decryptedBlocks);
+                setHistory([JSON.parse(JSON.stringify(decryptedBlocks))]); 
+                setCurrentIndex(0);
+              } else {
+                setBlocks([]);
+                setHistory([[]]);
+                setCurrentIndex(0);
+              }
             }
             setSavingStatus('saved');
           
@@ -414,7 +432,7 @@ const isProcessing = useRef(false);
     socket.on("block:locked", ({ blockId, userId }) => {
     setBlocks(prev =>
       prev.map(b =>
-        b.id === blockId
+        (b.blockId === blockId || b.id === blockId)
           ? {
             ...b,
             status: "locked",
@@ -428,7 +446,7 @@ const isProcessing = useRef(false);
   socket.on("block:unlocked", ({ blockId }) => {
     setBlocks(prev =>
       prev.map(b =>
-        b.id === blockId
+        (b.blockId === blockId || b.id === blockId)
           ? {
             ...b,
             status: "saved",
@@ -443,37 +461,75 @@ const isProcessing = useRef(false);
       if (payload.blockId === activeBlockId) return;
       
       if (payload.cipherText && payload.cipherText.includes(':')) {
-        const [iv, cipher] = payload.cipherText.split(':');
-        const blockEpoch = payload.epoch ?? 0; 
-        const correctDrk = drkMapRef.current.get(blockEpoch);
-        if (!correctDrk) {
-          console.error(`Không tìm thấy khóa cho Epoch ${blockEpoch} để giải mã update.`);
-          return;
-        }
+        try {
+          const [iv, cipher] = payload.cipherText.split(':');
+          const blockEpoch = payload.epoch ?? 0; 
+          const correctDrk = drkMapRef.current.get(blockEpoch);
+          if (!correctDrk) {
+            console.error(`Không tìm thấy khóa cho Epoch ${blockEpoch} để giải mã update.`);
+            return;
+          }
 
-       try {
+          // giải mã nội dung
           const plainText = await cryptoRef.current.decryptBlock(
             cipher, 
             iv, 
             correctDrk, 
             payload.blockId
           );
-          
-          setBlocks(prev =>
-            prev.map(b => (b.blockId === payload.blockId || b.id === payload.blockId) 
-              ? { ...b, content: plainText, epoch: blockEpoch } // Cập nhật cả nội dung và epoch mới nhất
-              : b
-            )
-          );
+
+          // cập nhật giao diện
+          setBlocks(prev => {
+            return prev.map(b => {
+              if (b.blockId === payload.blockId || b.id === payload.blockId) {
+                // Chỉ cập nhật nếu version mới lớn hơn hoặc bằng version hiện tại
+                if (payload.version < (b.version || 0)) return b; 
+                
+                return { 
+                  ...b, 
+                  content: plainText, 
+                  epoch: blockEpoch, 
+                  version: payload.version,
+                  hash: payload.hash, 
+                  prevHash: payload.prevHash,
+                  authorId: payload.authorId
+                };
+              }
+              return b;
+            });
+          });
+
+          // lưu indexDB để khi f5 k bị lệch hash 
+          const db = await getDB();
+          await db.put('blocks', {
+            ...payload, 
+            id: payload.blockId,
+            content: plainText // Lưu text để hiển thị nhanh
+          });
         } catch (err) {
           console.error("Lỗi giải mã block từ socket:", err);
         }
       }
     });
 
-    socket.on("block:create", payload => {
-      const plain = cryptoRef.current.decryptBlock(payload);
-      setBlocks(prev => [...prev, plain]);
+    socket.on("block:create", async (payload) => {
+      try {
+        const [iv, cipher] = payload.cipherText.split(':');
+        const correctDrk = drkMapRef.current.get(payload.epoch);
+        const plainText = await cryptoRef.current.decryptBlock(cipher, iv, correctDrk, payload.blockId);
+      
+        const newBlock = { ...payload, content: plainText, id: payload.blockId };
+
+        setBlocks(prev => {
+        // Tránh duplicate nếu socket gửi nhanh hơn logic local
+        if (prev.find(b => b.id === newBlock.id)) return prev;
+
+        const updated = [...prev, newBlock].sort((a, b) => a.index - b.index);
+        return updated.map((b, i) => ({ ...b, index: i }));
+        });
+      } catch (e) {
+        console.error("Lỗi khi nhận block mới từ socket:", e);
+      }
     });
 
     return () => {
@@ -482,45 +538,101 @@ const isProcessing = useRef(false);
       socket.off("block:update");
       socket.off("block:create");
     };
-  }, [socket, drk]);
+  }, [socket, drk, activeBlockId]);
+
+  // cập nhật blockRef khi blocks thay đổi để socket đọc được giá trị blocks mới nhất
+  useEffect(() => {
+    blocksRef.current = blocks;
+  }, [blocks]);
 
   const handleBlockChange = (blockId, content) => {
+    const currentBlockInState = blocksRef.current.find(b => b.blockId === blockId || b.id === blockId);
+    if (currentBlockInState && currentBlockInState.content === content) {
+      return; 
+    }
+
     setSavingStatus('saving');
-    const newBlocks = blocks.map(block => 
-      (block.blockId === blockId || block.id === blockId) ? { ...block, content } : block
-    );
-    setBlocks(newBlocks);
-    
+
+
+    const oldVersion = currentBlockInState ? (currentBlockInState.version || 1) : 1;
+    const oldHash = currentBlockInState ? (currentBlockInState.hash || "0") : "0";
+    let updatedVersion = oldVersion + 1;
+
+    setBlocks(prev => prev.map(block => {
+      if (block.blockId === blockId || block.id === blockId) {
+        updatedVersion = (block.version || 1) + 1;
+        return { ...block, content, version: updatedVersion };
+      }
+      return block;
+    }));
+      
     clearTimeout(window.saveTimeout);
     window.saveTimeout = setTimeout(async () => {
       const userId = localStorage.getItem('userId'); 
-      const blockToSave = newBlocks.find(b => b.blockId === blockId || b.id === blockId);
+      const token = localStorage.getItem('accessToken');
+      const currentBlocks = blocksRef.current;
+
+      const blockIndex = currentBlocks.findIndex(b => b.blockId === blockId || b.id === blockId);
+      const blockToSave = currentBlocks[blockIndex];
       
-      if (blockToSave && userId) {
+      if (blockToSave && userId && drk) {
         try {
           const encrypted = await BlockCryptoModule.encryptBlock(content, drk, blockId);
           const combined = `${encrypted.iv}:${encrypted.cipherText}`;
 
-          await createBlockVersionLocal(userId, {
-            ...blockToSave,
-            epoch: blockToSave.epoch,
-            version: (blockToSave.version || 1) + 1,
-            cipherText: combined
+          const fullBlockData = {
+            blockId: String(blockId),
+            authorId: String(userId),
+            documentId: id, 
+            index: Number(blockIndex),
+            version: Number(updatedVersion),
+            cipherText: String(combined),
+            prevHash: String(oldHash), 
+            epoch: Number(blockToSave.epoch || 0)
+          };
+
+          const newHash = await BlockCryptoModule.calculateBlockHash(fullBlockData, drk);
+          //const { authorId, ...dataPayload } = fullBlockData;
+          //const finalPayload = { ...dataPayload, hash: newHash };
+          const finalPayload = { ...fullBlockData, hash: newHash};
+
+          // gửi lên server
+          const response = await fetch(`${process.env.REACT_APP_API_URL}/blocks/${id}`, {
+            method: 'POST',
+            headers: { 
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify(finalPayload)
           });
 
-           socket.emit("block:update", { documentId: id, blockId, cipherText: combined, epoch: blockToSave.epoch });
-          // luu tren server nua. thoi luu len server trc cho de
+          if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.message || "Lỗi API");
+          }
 
-           addToHistory(newBlocks);
-           
+          setBlocks(prev => prev.map(b => 
+            (b.blockId === blockId || b.id === blockId) 
+              ? { ...b, hash: newHash, authorId: userId, version: updatedVersion } 
+              : b
+          ));
+
+          await createBlockVersionLocal(userId, finalPayload);
+
+           socket.emit("block:update", { documentId: id, blockId, cipherText: combined, epoch: blockToSave.epoch, version: updatedVersion, hash: newHash, authorId: userId });
+
            setSavingStatus('saved');
         } catch (error) {
           console.error("Lỗi khi lưu block local:", error);
           setSavingStatus('error');
         }
       }
-      
     }, 120000);
+
+    clearTimeout(window.historyTimeout);
+    window.historyTimeout = setTimeout(() => {
+      addToHistory(blocksRef.current);
+    }, 150000);
   };
 
   const handleAddBlock = async (index) => {
@@ -545,25 +657,17 @@ const isProcessing = useRef(false);
 
       const blockData = {
         blockId: String(newUUID),
-        authorId: userId,
+        authorId: String(userId),
         documentId: currentServerDocId,
         index: Number(index + 1),
         version: initialVersion,
         cipherText: String(combinedCipherText),
         prevHash: "0",
-        hash: await BlockCryptoModule.calculateBlockHash({
-          blockId: newUUID,
-          authorId: userId,
-          documentId: currentServerDocId,
-          index: Number(index + 1),
-          version: initialVersion,
-          epoch: latestKey.epoch,
-          cipherText: combinedCipherText,
-          prevHash: "0"
-        }, drk),
         epoch: latestKey.epoch
       };
 
+      blockData.hash = await BlockCryptoModule.calculateBlockHash(blockData, drk);
+      
       // gui data len server
       const response = await fetch(`${process.env.REACT_APP_API_URL}/blocks/${currentServerDocId}`, {
         method: 'POST',
@@ -581,9 +685,15 @@ const isProcessing = useRef(false);
 
       // luu indexDB
       await createBlockVersionLocal(userId, blockData);
-      const newBlockForUI = { ...blockData, content: "", id: newUUID };
+      const newBlockForUI = { 
+        ...blockData, 
+        content: "", 
+        id: newUUID,
+        status: 'saved' 
+      };
       const newBlocksArray = [...blocks];
       newBlocksArray.splice(index + 1, 0, newBlockForUI);
+      
       
       const finalBlocks = newBlocksArray.map((b, i) => ({ ...b, index: i }));
 
@@ -601,26 +711,24 @@ const isProcessing = useRef(false);
     if (!activeBlockId) return;
     setSavingStatus('saving');
 
-    // Lưu lịch sử hiện tại trước khi đổi căn lề
-    const nextHistory = history.slice(0, currentIndex + 1);
-    setHistory([...nextHistory, cloneBlocks(blocks)]);
-    setCurrentIndex(nextHistory.length);
+    setBlocks(prev => {
+      const updated = prev.map(block => {
+        if (block.id === activeBlockId) {
+          return { 
+            ...block, 
+            textAlign: alignment,
+            version: (block.version || 0) + 1 
+          };
+        }
+        return block;
+      });
+      
+      // Đưa vào history sau khi cập nhật state
+      addToHistory(updated); 
+      return updated;
+    });
 
-    setBlocks(prev => prev.map(block => {
-      if (block.id === activeBlockId) {
-        return { 
-          ...block, 
-          textAlign: alignment,
-          version: block.version + 1 
-        };
-      }
-      return block;
-    }));
-
-    clearTimeout(historyTimer.current);
-      historyTimer.current = setTimeout(() => {
-      setSavingStatus('saved');
-    }, 600);
+    setTimeout(() => setSavingStatus('saved'), 600);
   };
 
   useEffect(() => {
@@ -645,20 +753,58 @@ const isProcessing = useRef(false);
   };
 
   // Hàm Undo
-  const handleUndo  = () => {
-    if (currentIndex > 0) {
-      const prevStep = currentIndex - 1;
-      setCurrentIndex(prevStep);
-      setBlocks(JSON.parse(JSON.stringify(history[prevStep])));
+  const handleUndo  = async () => {
+    if (indexRef.current > 0) {
+      const nextIdx = indexRef.current - 1;
+      await applyHistoryStep(nextIdx);
     }
   };
 
   // Hàm Redo
- const handleRedo = () => {
-    if (currentIndex < history.length - 1) {
-      const nextStep = currentIndex + 1;
-      setCurrentIndex(nextStep);
-      setBlocks(JSON.parse(JSON.stringify(history[nextStep])));
+ const handleRedo = async () => {
+    if (indexRef.current < history.length - 1) {
+      const nextIdx = indexRef.current + 1;
+      await applyHistoryStep(nextIdx);
+    }
+  };
+
+  // Hàm dùng chung để áp dụng một bước lịch sử
+  const applyHistoryStep = async (stepIndex) => {
+    const targetState = JSON.parse(JSON.stringify(history[stepIndex]));
+    
+    // 1. Cập nhật giao diện local
+    setBlocks(targetState);
+    indexRef.current = stepIndex;
+    setCurrentIndex(stepIndex);
+
+    // 2. QUAN TRỌNG: Đồng bộ các thay đổi lên Server/Socket
+    targetState.forEach(async (targetBlock) => {
+      const currentBlock = blocksRef.current.find(b => b.id === targetBlock.id);
+    
+      // Nếu nội dung khác nhau, tức là đây là block cần được Undo/Redo trên server
+      if (!currentBlock || currentBlock.content !== targetBlock.content) {
+        await syncBlockToNetwork(targetBlock);
+      }
+    });
+  };
+
+  // Hàm bổ trợ để tái sử dụng logic gửi socket
+  const syncBlockToNetwork = async (block) => {
+    try {
+      const encrypted = await BlockCryptoModule.encryptBlock(block.content, drk, block.id);
+      const combined = `${encrypted.iv}:${encrypted.cipherText}`;
+      const latestBlockInMemory = blocksRef.current.find(b => b.id === block.id);
+      const newVersion = Math.max(block.version || 0, (latestBlockInMemory?.version || 0)) + 1;
+
+      socket.emit("block:update", { 
+        documentId: id, 
+        blockId: block.id, 
+        cipherText: combined, 
+        epoch: block.epoch, 
+        version: newVersion 
+      });
+    } catch (e) {
+      console.error("Lỗi đồng bộ khi Undo/Redo:", e);
     }
   };
 
