@@ -592,9 +592,8 @@ const DocumentEditor = ({ onLogout, socket }) => {
           };
 
           const newHash = await BlockCryptoModule.calculateBlockHash(fullBlockData, drk);
-          //const { authorId, ...dataPayload } = fullBlockData;
-          //const finalPayload = { ...dataPayload, hash: newHash };
-          const finalPayload = { ...fullBlockData, hash: newHash};
+          const { authorId, ...dataPayload } = fullBlockData;
+          const finalPayload = { ...dataPayload, hash: newHash };
 
           // gửi lên server
           const response = await fetch(`${process.env.REACT_APP_API_URL}/blocks/${id}`, {
@@ -613,13 +612,13 @@ const DocumentEditor = ({ onLogout, socket }) => {
 
           setBlocks(prev => prev.map(b => 
             (b.blockId === blockId || b.id === blockId) 
-              ? { ...b, hash: newHash, authorId: userId, version: updatedVersion } 
+              ? { ...b, hash: newHash, version: updatedVersion } 
               : b
           ));
 
           await createBlockVersionLocal(userId, finalPayload);
 
-           socket.emit("block:update", { documentId: id, blockId, cipherText: combined, epoch: blockToSave.epoch, version: updatedVersion, hash: newHash, authorId: userId });
+           socket.emit("block:update", { documentId: id, blockId, cipherText: combined, epoch: blockToSave.epoch, version: updatedVersion, hash: newHash });
 
            setSavingStatus('saved');
         } catch (error) {
@@ -666,7 +665,10 @@ const DocumentEditor = ({ onLogout, socket }) => {
         epoch: latestKey.epoch
       };
 
-      blockData.hash = await BlockCryptoModule.calculateBlockHash(blockData, drk);
+      const calculatedHash = await BlockCryptoModule.calculateBlockHash(blockData, drk);
+      blockData.hash = calculatedHash;
+
+      const { authorId, ...serverPayload } = blockData;
       
       // gui data len server
       const response = await fetch(`${process.env.REACT_APP_API_URL}/blocks/${currentServerDocId}`, {
@@ -675,7 +677,7 @@ const DocumentEditor = ({ onLogout, socket }) => {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify(blockData)
+        body: JSON.stringify({ ...serverPayload, hash: calculatedHash })
       });
 
       if (!response.ok) {

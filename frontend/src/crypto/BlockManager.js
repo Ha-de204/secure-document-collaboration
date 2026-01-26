@@ -325,6 +325,7 @@ const BlockCryptoModule = {
     );
 
     const message = stringToBuffer(`${blockId}|${authorId}|${documentId}|${index}|${version}|${epoch}|${cipherText}|${prevHash}`);
+    console.log("DEBUG MESSAGE STRING:", message);
     const signature = await subtle.sign({ name: "HMAC" }, hmacKey, message);
 
     return encodeBuffer(signature);
