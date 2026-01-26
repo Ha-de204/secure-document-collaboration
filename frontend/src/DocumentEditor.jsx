@@ -55,6 +55,7 @@ const DocumentEditor = ({ onLogout, socket }) => {
   // History management
   const [currentIndex, setCurrentIndex] = useState(0);
   const [history, setHistory] = useState([[]]);
+   const [publicKey, setPublicKey] = useState({});
 
   const isRestoringHistory = useRef(false);
   const [zoom, setZoom] = useState(100);
@@ -92,6 +93,162 @@ const DocumentEditor = ({ onLogout, socket }) => {
     });
   }, []);
 
+  const syncWithServer = async (docID) => {
+    try {
+      const token = localStorage.getItem('accessToken');
+  
+      setSavingStatus('syncing');
+      // lay document 
+      const db = await getDB();
+      let document = await db.get('documents', docID);
+      if (!document) {
+        // load document metadata tu server
+       const res = await fetch(`${process.env.REACT_APP_API_URL}/documents/${docID}`, {
+        method: 'GET',
+          headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          }
+        });
+        const data = await res.json();
+        document = data.data;
+        // bao k ton tai
+        if(!document) {
+          alert("Document không tồn tại hoặc đã bị xóa trên server.");
+          throw new Error("Document không tồn tại hoặc đã bị xóa trên server.");
+        }
+        await saveDocumentLocally(document);
+        
+      }
+      // lay ownerPublicKey
+      let ownerPublicKey = await getPublicKey(document.ownerId);
+      if(!ownerPublicKey) {
+        const userRes = await fetch(`${process.env.REACT_APP_API_URL}/users/${document.ownerId}`, {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          }
+        });
+        const userData = await userRes.json();
+        ownerPublicKey = userData.data?.identityKey || userData.data?.IdentityKey;
+        if(!ownerPublicKey){
+        throw new Error("Không lấy được Public Key của chủ sở hữu tài liệu.");
+        }
+        setPublicKey(prevMap => {
+          const updatedMap = new Map(prevMap);
+          updatedMap.set(userData.data._id, ownerPublicKey);
+          return updatedMap;
+        })
+        savePublicKey({
+          userId: document.ownerId,
+          userName: userData.data.userName,
+          publicKey: ownerPublicKey
+        });
+      }
+      
+  
+      const response = await fetch(`${process.env.REACT_APP_API_URL}/blocks/lastest-version/${docID}`, {
+        method: 'GET',
+          headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          }
+        });
+      const serverBlocks = (await response.json()).data;
+  
+      const localBlocks = await getLatestBlocksLocal(docID);
+  
+      const processedBlockIds = new Set();
+      for (const sMeta of serverBlocks) {
+        processedBlockIds.add(sMeta.blockId);
+        const lBlock = localBlocks.find(l => l.blockId === sMeta.blockId);
+  
+        if (!lBlock || sMeta.version > lBlock.version) {
+  
+          console.log(`Đồng bộ lịch sử block ${sMeta.blockId} từ Server...`);
+          const startVersion = lBlock ? (lBlock.version + 1 ): 1;
+          const versions = Array.from(
+            { length: sMeta.version - startVersion + 1 }, 
+            (_, i) => startVersion + i
+          );
+          const blockId = sMeta.blockId;
+          const versionOfBlock = await fetch(`${process.env.REACT_APP_API_URL}/blocks/versions/${blockId}`, {
+            method: 'POST',
+            headers: { 
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify(versions)
+            });
+            const freshBlock = await versionOfBlock.json();
+            // ktra day version nhan dc (neu dung thi luu trong indexdb)
+          const valid = await BlockCryptoModule.verifyBatchBlocks(freshBlock,lBlock,ownerPublicKey);
+          // cap nhat block moi nhat
+          if (valid.status) {
+            
+          }
+  
+        }
+      }
+     /*
+      for (const lBlock of localBlocks) {
+        if (!processedBlockIds.has(lBlock.blockId)) {
+          console.log(`Đẩy block mới tạo offline ${lBlock.blockId} lên Server...`);
+          // tao version moi
+          await fetch(`${process.env.REACT_APP_API_URL}/blocks/${docID}`, {
+          method: 'POST',
+            headers: { 
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({
+              blockId: lBlock.blockId,
+              documentId: docID,
+              index: lBlock.index,
+              version: lBlock.version,
+              cipherText: lBlock.cipherText,
+              prevHash: lBlock.prevHash,
+              hash: lBlock.hash,
+              epoch: lBlock.epoch
+            })
+          },
+        );
+        } else {
+          const sMeta = serverBlocks.find(s => s.blockId === lBlock.blockId);
+          if (lBlock.version > sMeta.version) {
+             await fetch(`${process.env.REACT_APP_API_URL}/blocks/${docID}`, {
+          method: 'POST',
+            headers: { 
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({
+              blockId: lBlock.blockId,
+              documentId: docID,
+              index: lBlock.index,
+              version: lBlock.version,
+              cipherText: lBlock.cipherText,
+              prevHash: lBlock.prevHash,
+              hash: lBlock.hash,
+              epoch: lBlock.epoch
+            })
+          });
+          }
+        }
+      }
+     */
+      // 5. Cập nhật UI
+      const finalBlocks = await getLatestBlocksLocal(docID);
+      setBlocks(finalBlocks);
+      setSavingStatus('saved');
+  
+    } catch (error) {
+      console.error("Lỗi đồng bộ:", error);
+      setSavingStatus('error');
+    }
+  };
+
   useEffect(() => {
     if (!id || !socket) return;
 
@@ -111,7 +268,9 @@ const DocumentEditor = ({ onLogout, socket }) => {
       socket.emit("document:leave", { documentId: id });
     };
   }, [id, socket]);
-const isProcessing = useRef(false);
+
+  const isProcessing = useRef(false);
+
   useEffect(() => {
     const loadDocumentData = async () => {
       if (!id) return;
@@ -243,7 +402,7 @@ const isProcessing = useRef(false);
 
               if (decryptedBlocks.length > 0) {
                 setBlocks(decryptedBlocks);
-                setHistory([JSON.parse(JSON.stringify(decryptedBlocks))]); // Reset history về trạng thái ban đầu của doc
+                setHistory([JSON.parse(JSON.stringify(decryptedBlocks))]); 
                 setCurrentIndex(0);
               } else {
                 setBlocks([]);
@@ -433,8 +592,9 @@ const isProcessing = useRef(false);
           };
 
           const newHash = await BlockCryptoModule.calculateBlockHash(fullBlockData, drk);
-          const { authorId, ...dataPayload } = fullBlockData;
-          const finalPayload = { ...dataPayload, hash: newHash };
+          //const { authorId, ...dataPayload } = fullBlockData;
+          //const finalPayload = { ...dataPayload, hash: newHash };
+          const finalPayload = { ...fullBlockData, hash: newHash};
 
           // gửi lên server
           const response = await fetch(`${process.env.REACT_APP_API_URL}/blocks/${id}`, {
@@ -452,12 +612,14 @@ const isProcessing = useRef(false);
           }
 
           setBlocks(prev => prev.map(b => 
-            (b.blockId === blockId || b.id === blockId) ? { ...b, hash: newHash } : b
+            (b.blockId === blockId || b.id === blockId) 
+              ? { ...b, hash: newHash, authorId: userId, version: updatedVersion } 
+              : b
           ));
 
           await createBlockVersionLocal(userId, finalPayload);
 
-           socket.emit("block:update", { documentId: id, blockId, cipherText: combined, epoch: blockToSave.epoch, version: updatedVersion, hash: newHash });
+           socket.emit("block:update", { documentId: id, blockId, cipherText: combined, epoch: blockToSave.epoch, version: updatedVersion, hash: newHash, authorId: userId });
 
            setSavingStatus('saved');
         } catch (error) {
@@ -490,32 +652,22 @@ const isProcessing = useRef(false);
       const initialVersion = 1;
       const latestKey = await DocumentKeyService.getLatestDRK(id);
 
-      const lastBlock = blocks.length > 0 ? blocks[blocks.length - 1] : null;
-      const previousHash = lastBlock ? lastBlock.hash : "GENESIS_BLOCK_HASH";
-
       const encrypted = await BlockCryptoModule.encryptBlock("", drk, newUUID);
       const combinedCipherText = `${encrypted.iv}:${encrypted.cipherText}`;
 
       const blockData = {
         blockId: String(newUUID),
+        authorId: String(userId),
         documentId: currentServerDocId,
         index: Number(index + 1),
         version: initialVersion,
         cipherText: String(combinedCipherText),
         prevHash: "0",
-        hash: await BlockCryptoModule.calculateBlockHash({
-          blockId: newUUID,
-          authorId: userId,
-          documentId: currentServerDocId,
-          index: Number(index + 1),
-          version: initialVersion,
-          epoch: latestKey.epoch,
-          cipherText: combinedCipherText,
-          prevHash: "0"
-        }, drk),
         epoch: latestKey.epoch
       };
 
+      blockData.hash = await BlockCryptoModule.calculateBlockHash(blockData, drk);
+      
       // gui data len server
       const response = await fetch(`${process.env.REACT_APP_API_URL}/blocks/${currentServerDocId}`, {
         method: 'POST',
@@ -533,9 +685,15 @@ const isProcessing = useRef(false);
 
       // luu indexDB
       await createBlockVersionLocal(userId, blockData);
-      const newBlockForUI = { blockData, content: "", id: newUUID };
+      const newBlockForUI = { 
+        ...blockData, 
+        content: "", 
+        id: newUUID,
+        status: 'saved' 
+      };
       const newBlocksArray = [...blocks];
       newBlocksArray.splice(index + 1, 0, newBlockForUI);
+      
       
       const finalBlocks = newBlocksArray.map((b, i) => ({ ...b, index: i }));
 
