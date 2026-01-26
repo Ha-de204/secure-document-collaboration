@@ -129,9 +129,43 @@ const getLatestDocKey = async (req, res) => {
     })
   }
 }
-
+const getDocKeyByEpoch = async(req, res) => {
+  try {
+    const { documentId } = req.params
+    const { epoch } = req.query
+    const userId = req.user.userId
+    const result = await docKeyService.getDocKeyByVersion({ documentId, userId, epoch })
+    if (!result.status) {
+      switch (result.error) {
+        case 'DOCUMENT_NOT_FOUND':
+          return res.status(404).json({
+            status: false,
+            message: 'Document not found'
+          })
+        case 'DOC_KEY_NOT_FOUND':
+          return res.status(404).json({
+            status: false,
+            message: 'DocumentKey not found'
+          })
+        default:
+          return res.status(400).json({
+            status: false,
+            message: 'Get DocumentKey by version failed'
+          })
+      }
+    }
+    return res.json(result)
+  } catch (err) {
+    console.error('[DocKeyController][getByVersion]', err)
+    return res.status(500).json({
+      status: false,
+      message: 'Internal server error'
+    })
+}
+}
 module.exports = {
   createDocKey,
   getDocKeys,
-  getLatestDocKey
+  getLatestDocKey,
+  getDocKeyByEpoch
 }

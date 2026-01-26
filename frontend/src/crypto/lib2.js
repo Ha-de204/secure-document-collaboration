@@ -1,7 +1,6 @@
 'use strict'
 
-const crypto = require('node:crypto')
-const { subtle } = require('node:crypto').webcrypto
+const subtle = window.crypto.subtle;
 
 /// ////////////////////////////////////////////////////////////////////////////////
 // Cryptographic Primitives
@@ -182,6 +181,36 @@ async function signWithECDSA (privateKey, message) {
   return await subtle.sign({ name: 'ECDSA', hash: { name: 'SHA-384' } }, privateKey, Buffer.from(message))
 }
 
+async function encryptRSA(publicKey, plaintext) {
+  const data = typeof plaintext === 'string' ? Buffer.from(plaintext) : plaintext;
+  return await subtle.encrypt(
+    { name: "RSA-OAEP" },
+    publicKey,
+    data
+  );
+}
+
+async function decryptRSA(privateKey, ciphertext) {
+  return await subtle.decrypt(
+    { name: "RSA-OAEP" },
+    privateKey,
+    ciphertext
+  );
+}
+
+async function generateRSA() {
+  const keypair = await subtle.generateKey(
+    {
+      name: "RSA-OAEP",
+      modulusLength: 2048,
+      publicExponent: new Uint8Array([1, 0, 1]),
+      hash: "SHA-256", 
+    },
+    true,
+    ["encrypt", "decrypt"]
+  );
+  return { pub: keypair.publicKey, sec: keypair.privateKey };
+}
 module.exports = {
   govEncryptionDataStr, // ko lquan
   bufferToString, 
@@ -196,5 +225,8 @@ module.exports = {
   encryptWithGCM, // ma hoa aes-gcm
   decryptWithGCM, // giai ma
   generateECDSA, // sinh khoa identity
-  signWithECDSA // ki bang khoa identity
+  signWithECDSA, // ki bang khoa identity
+  encryptRSA,
+  decryptRSA,
+  generateRSA
 }

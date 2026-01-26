@@ -35,16 +35,12 @@ async function deriveMasterKey(password, salt) {
 export async function initIdentity(userName, password) {
   if (!userName) throw new Error("Dữ liệu không hợp lệ: Thiếu UserName");
   const existing = await getMyKey(userName);
-  if (!userName) throw new Error("Dữ liệu không hợp lệ: Thiếu UserName");
-  const existing = await getMyKey(userName);
   if (existing)  return existing.publicKey;
 
   // 1. Generate Identity Key
   const keyPair = await crypto.subtle.generateKey(
     { name: "ECDSA", namedCurve: "P-256" },
-    { name: "ECDSA", namedCurve: "P-256" },
     true,
-    ["sign", "verify"]
     ["sign", "verify"]
   );
 
@@ -62,11 +58,8 @@ export async function initIdentity(userName, password) {
 
   // 2. Store local 
   await saveMyKey(userName, {
-  await saveMyKey(userName, {
     publicKey: bufferToBase64(pubBuf),
     encryptedPrivateKey: bufferToBase64(encryptedPriv),
-    iv: bufferToBase64(iv),
-    algo: "ECDSA"
     iv: bufferToBase64(iv),
     algo: "ECDSA"
   });
@@ -75,11 +68,6 @@ export async function initIdentity(userName, password) {
 }
 
 export async function unlockIdentity(userName, password) {
-  const identity = await getMyKey(userName);
-  if (!identity) {
-    // Nếu getMyKey trả về undefined, lỗi này sẽ bắn ra
-    throw new Error("Không tìm thấy khóa bảo mật trên thiết bị này!");
-  }
   const identity = await getMyKey(userName);
   if (!identity) {
     // Nếu getMyKey trả về undefined, lỗi này sẽ bắn ra

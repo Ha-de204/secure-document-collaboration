@@ -5,6 +5,32 @@ import {
   decodeBuffer,
   getRandomBytes
 } from "./lib";
+import {
+  getLatestVersion,
+  createBlockVersionLocal
+} from "../services/BlockService";
+import{
+  getMyKey
+} from '../services/IdentityKy';
+import  DocumentKeyService  from '../services/DRKService';
+import{
+  genRandomSalt, // sinh salt
+  cryptoKeyToJSON, 
+  generateEG, // sinh khoa eg cho double ratchet
+  computeDH, // tinh dh 
+  verifyWithECDSA, // xac thuc bang khoa identity
+  HMACtoAESKey, // doubleratchet
+  HMACtoHMACKey, /// double ratchet
+  HKDF, // dan xuat khoa root va chian key (double ratchet)
+  encryptWithGCM, // ma hoa aes-gcm
+  decryptWithGCM, // giai ma
+  generateECDSA, // sinh khoa identity
+  signWithECDSA, // ki bang khoa identity
+  encryptRSA,
+  decryptRSA,
+  generateRSA
+} from './lib2';
+import { initIdentity, unlockIdentity } from "../crypto/IdentityManager";
 const subtle = window.crypto.subtle;
 
 const BLOCK_KEY_LABEL = "BLOCK_ENCRYPTION_KEY";
@@ -17,7 +43,7 @@ const BlockCryptoModule = {
   },
 
   /**
-   * Mã hóa dữ liệu bằng Public Key (RSA-OAEP)
+   * Mã hóa dữ liệu bằng Public Key 
    * @param {string} data - Dữ liệu thô cần mã hóa (rawDRK)
    */
 
@@ -280,7 +306,7 @@ const BlockCryptoModule = {
       throw new Error(`Giải mã Block ${blockId} thất bại. Dữ liệu có thể bị sửa đổi.`);
     }
   },
-
+  
   async calculateBlockHash(blockData, drk) {
      const {
       blockId,
@@ -290,7 +316,7 @@ const BlockCryptoModule = {
       version,
       epoch,
       cipherText,
-      prevHash = "GENESIS_BLOCK_HASH",
+      prevHash = "0",
     } = blockData;
     
     const hmacKey = await this._deriveKey(
@@ -329,7 +355,119 @@ const BlockCryptoModule = {
       lastHash = block.hash;
     }
     return { valid: true };
+  },
+
+  async vertifyBlock(block,drk){
+    // lay block moi nhat trong local
+    
+    const lastBlock = await getLatestVersion(block.blockId)
+    if(lastBlock.version >= block.version){
+      return {
+        status: false,
+        error: 'OLD_VERSION_BLOCK'
+      }
+    }
+    // tinh toan lai hash de doi chieu
+    const expectedHash = await this.calculateBlockHash(block, drk);
+    const isValid = (block.hash === expectedHash);
+    if(!isValid){
+      return {
+        status: false,
+        error: 'CORRUPT_BLOCK'
+      }
+    }
+    return {
+      status: true,
+      data: block
+    }
+  },
+  
+  // vertify 1 dai version cua 1 block vs chung blockId
+  async verifyBatchBlocks(payload,lastestLocalBlock, ownerPublicKey, password) {
+  const userName = localStorage.getItem('userName');
+  const { blocks, keys } = payload.data;
+  if (!blocks || blocks.length === 0) return { status: true };
+
+  const sortedBlocks = [...blocks].sort((a, b) => a.version - b.version);
+
+  const anchorBlock = lastestLocalBlock;
+  let lastHash = anchorBlock ? anchorBlock.hash : "0";
+  let lastVersion = anchorBlock ? anchorBlock.version : -1;
+  var myPrivateKey = await getMyKey(userName);
+
+  const pubKeys = await this.vertifyPublicKey(keys, myPrivateKey.encryptedPrivateKey, ownerPublicKey)
+  const verifiedData = [];
+  
+  for (const block of sortedBlocks) {
+    if (block.version <= lastVersion) continue; 
+
+    if (block.prevHash !== lastHash) {
+      return { 
+        status: false, 
+        error: 'CHAIN_BROKEN', 
+        details: `V${block.version} yêu cầu prevHash ${block.prevHash} nhưng bản trước đó có hash ${lastHash}`
+      };
+    }
+
+    const currentDRK = pubKeys.get(block.epoch);
+    const expectedHash = await this.calculateBlockHash(block, currentDRK);
+    
+    if (block.hash !== expectedHash) {
+      return { status: false, error: 'HASH_MISMATCH', version: block.version };
+    }
+    //luu va indexdb
+    await createBlockVersionLocal({
+        blockId: block.blockId,
+        documentId: block.documentId,
+        index: block.index,
+        version: block.version,
+        epoch: block.epoch,
+        cipherText: block.cipherText,
+        prevHash: block.prevHash,
+        hash: block.hash
+      })
+    lastHash = block.hash;
+    lastVersion = block.version;
+    verifiedData.push(block);
   }
+  
+  return { status: true, data: verifiedData };
+},
+
+async  vertifyPublicKey(serverKeys, myPrivateKey, ownerPublicKey) {
+  const keyMap = new Map();
+
+  for (const k of serverKeys) {
+
+    const isValidSignature = await BlockCryptoModule.verifySignature(
+      `doc:${k.documentId}|epoch:${k.epoch}|drk:${k.encryptedDocKey}`, // Data gốc
+      k.signature, // Chữ ký từ server
+      ownerPublicKey
+    );
+
+    if (!isValidSignature) {
+      console.error(`CẢNH BÁO: Khóa epoch ${k.epoch} bị giả mạo hoặc không rõ nguồn gốc!`);
+      throw new Error("SECURITY_BREACH_DETECTED");
+    }
+     const rawPrivateKey = window.myPrivateKey
+    const rawDRK = await this.decryptWithPrivateKey( rawPrivateKey, k.encryptedDocKey);
+    
+    keyMap.set(k.epoch, rawDRK);
+    // luu vao indexdb
+    await DocumentKeyService.saveDRK({
+      documentId: k.documentId,
+      epoch: k.epoch,
+      encryptedDRK: k.encryptedDocKey,
+      signedBy: k.userId,
+      signature: k.signature,
+      createAt: k.createAt
+    })
+  }
+  
+  return keyMap;
+}
 };
 
+
+  
 export default BlockCryptoModule;

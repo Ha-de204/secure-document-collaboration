@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, version } from 'react';
 import { Plus } from 'lucide-react';
 import { Header } from './components/Header';
 import { Footer } from './components/Footer';
@@ -7,11 +7,37 @@ import './styles/editor.css';
 import { useParams, useNavigate } from 'react-router-dom';
 import BlockCryptoModule from "./crypto/BlockManager";
 import { getDB } from './storage/indexDbService';
+import { getPublicKey, savePublicKey } from './services/PublicKeyService';
+import { saveMyKey, getMyKey } from './services/IdentityKy';
 import { createBlockVersionLocal, getLatestBlocksLocal } from './services/BlockService';
 import DocumentKeyService from './services/DRKService';
 import { saveDocumentLocally, getLocalDocument } from './services/DocumentService';
 import axios from 'axios';
 import { unlockIdentity } from './crypto/IdentityManager';
+import {
+  stringToBuffer,
+  bufferToString,
+  encodeBuffer,
+  decodeBuffer,
+  getRandomBytes
+} from "./crypto/lib";
+import{
+  genRandomSalt, // sinh salt
+  cryptoKeyToJSON, 
+  generateEG, // sinh khoa eg cho double ratchet
+  computeDH, // tinh dh 
+  verifyWithECDSA, // xac thuc bang khoa identity
+  HMACtoAESKey, // doubleratchet
+  HMACtoHMACKey, /// double ratchet
+  HKDF, // dan xuat khoa root va chian key (double ratchet)
+  encryptWithGCM, // ma hoa aes-gcm
+  decryptWithGCM, // giai ma
+  generateECDSA, // sinh khoa identity
+  signWithECDSA, // ki bang khoa identity
+  encryptRSA,
+  decryptRSA,
+  generateRSA
+} from './crypto/lib2';
 
 const DocumentEditor = ({ onLogout, socket }) => {
   const { id } = useParams();
@@ -77,12 +103,25 @@ const DocumentEditor = ({ onLogout, socket }) => {
   }, [id, socket]);
 
   useEffect(() => {
+    if (!id || !socket) return;
+
+    socket.emit("document:join", { documentId: id });
+
+    return () => {
+      socket.emit("document:leave", { documentId: id });
+    };
+  }, [id, socket]);
+const isProcessing = useRef(false);
+  useEffect(() => {
     const loadDocumentData = async () => {
       if (!id) return;
       setBlocks([]); 
       setSavingStatus('loading');
-
+      if (isProcessing.current) return;
+      isProcessing.current = true;
       try {
+       
+
         let localDoc = await getLocalDocument(id);
 
         if (!localDoc) {
@@ -109,13 +148,14 @@ const DocumentEditor = ({ onLogout, socket }) => {
             const password = prompt("Tài liệu này đã được mã hóa. Vui lòng nhập mật khẩu ví để mở khóa:");
             if (!password){
               navigate('/');
+              isProcessing.current = false;
               return;
             }
             const userName = localStorage.getItem('userName');
-            myPrivateKey = await unlockIdentity(userName, password);
+            myPrivateKey = (await unlockIdentity(userName, password)).privateKey;
             window.myPrivateKey = myPrivateKey;
           }
-
+           await syncWithServer(id);
           // Lấy tất cả epoch của doc
           const allKeyRecords = await DocumentKeyService.getAllEpochsForDocument(id);
           if (allKeyRecords.length === 0) throw new Error("Không tìm thấy khóa tài liệu");
@@ -151,7 +191,6 @@ const DocumentEditor = ({ onLogout, socket }) => {
                 keyData.signature,    // Chữ ký base64
                 signerKeyInfo.publicKey // Public Key của người ký
               );
-
               if (!isDRKValid) {
                 console.error("❌ Chữ ký DRK không hợp lệ!");
                 alert("Cảnh báo: Khóa tài liệu (DRK) không hợp lệ hoặc đã bị giả mạo!");
@@ -291,11 +330,22 @@ const DocumentEditor = ({ onLogout, socket }) => {
                   ...b, 
                   content: plainText, 
                   epoch: blockEpoch, 
-                  version: payload.version 
+                  version: payload.version,
+                  hash: payload.hash, 
+                  prevHash: payload.prevHash,
+                  authorId: payload.authorId
                 };
               }
               return b;
             });
+          });
+
+          // lưu indexDB để khi f5 k bị lệch hash 
+          const db = await getDB();
+          await db.put('blocks', {
+            ...payload, 
+            id: payload.blockId,
+            content: plainText // Lưu text để hiển thị nhanh
           });
         } catch (err) {
           console.error("Lỗi giải mã block từ socket:", err);
@@ -337,9 +387,17 @@ const DocumentEditor = ({ onLogout, socket }) => {
   }, [blocks]);
 
   const handleBlockChange = (blockId, content) => {
+    const currentBlockInState = blocksRef.current.find(b => b.blockId === blockId || b.id === blockId);
+    if (currentBlockInState && currentBlockInState.content === content) {
+      return; 
+    }
+
     setSavingStatus('saving');
 
-    let updatedVersion = 1;
+
+    const oldVersion = currentBlockInState ? (currentBlockInState.version || 1) : 1;
+    const oldHash = currentBlockInState ? (currentBlockInState.hash || "0") : "0";
+    let updatedVersion = oldVersion + 1;
 
     setBlocks(prev => prev.map(block => {
       if (block.blockId === blockId || block.id === blockId) {
@@ -352,29 +410,54 @@ const DocumentEditor = ({ onLogout, socket }) => {
     clearTimeout(window.saveTimeout);
     window.saveTimeout = setTimeout(async () => {
       const userId = localStorage.getItem('userId'); 
+      const token = localStorage.getItem('accessToken');
       const currentBlocks = blocksRef.current;
-      const blockToSave = currentBlocks.find(b => b.blockId === blockId || b.id === blockId);
+
+      const blockIndex = currentBlocks.findIndex(b => b.blockId === blockId || b.id === blockId);
+      const blockToSave = currentBlocks[blockIndex];
       
-      if (blockToSave && userId) {
+      if (blockToSave && userId && drk) {
         try {
           const encrypted = await BlockCryptoModule.encryptBlock(content, drk, blockId);
           const combined = `${encrypted.iv}:${encrypted.cipherText}`;
 
-          const updatedHash = await BlockCryptoModule.calculateBlockHash({
-            ...blockToSave,
-            version: updatedVersion,
-            cipherText: combined
-          }, drk);
+          const fullBlockData = {
+            blockId: String(blockId),
+            authorId: String(userId),
+            documentId: id, 
+            index: Number(blockIndex),
+            version: Number(updatedVersion),
+            cipherText: String(combined),
+            prevHash: String(oldHash), 
+            epoch: Number(blockToSave.epoch || 0)
+          };
 
-          await createBlockVersionLocal(userId, {
-            ...blockToSave,
-            version: updatedVersion,
-            epoch: blockToSave.epoch,
-            cipherText: combined,
-            hash: updatedHash
+          const newHash = await BlockCryptoModule.calculateBlockHash(fullBlockData, drk);
+          const { authorId, ...dataPayload } = fullBlockData;
+          const finalPayload = { ...dataPayload, hash: newHash };
+
+          // gửi lên server
+          const response = await fetch(`${process.env.REACT_APP_API_URL}/blocks/${id}`, {
+            method: 'POST',
+            headers: { 
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify(finalPayload)
           });
 
-           socket.emit("block:update", { documentId: id, blockId, cipherText: combined, epoch: blockToSave.epoch, version: updatedVersion, hash: updatedHash });
+          if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.message || "Lỗi API");
+          }
+
+          setBlocks(prev => prev.map(b => 
+            (b.blockId === blockId || b.id === blockId) ? { ...b, hash: newHash } : b
+          ));
+
+          await createBlockVersionLocal(userId, finalPayload);
+
+           socket.emit("block:update", { documentId: id, blockId, cipherText: combined, epoch: blockToSave.epoch, version: updatedVersion, hash: newHash });
 
            setSavingStatus('saved');
         } catch (error) {
@@ -382,12 +465,12 @@ const DocumentEditor = ({ onLogout, socket }) => {
           setSavingStatus('error');
         }
       }
-    }, 1000);
+    }, 120000);
 
     clearTimeout(window.historyTimeout);
     window.historyTimeout = setTimeout(() => {
       addToHistory(blocksRef.current);
-    }, 1500);
+    }, 150000);
   };
 
   const handleAddBlock = async (index) => {
@@ -413,44 +496,24 @@ const DocumentEditor = ({ onLogout, socket }) => {
       const encrypted = await BlockCryptoModule.encryptBlock("", drk, newUUID);
       const combinedCipherText = `${encrypted.iv}:${encrypted.cipherText}`;
 
-     /* const blockData = {
+      const blockData = {
         blockId: String(newUUID),
-        authorId: String(userId),
         documentId: currentServerDocId,
         index: Number(index + 1),
         version: initialVersion,
         cipherText: String(combinedCipherText),
-        prevHash: previousHash,
+        prevHash: "0",
         hash: await BlockCryptoModule.calculateBlockHash({
-          blockId: String(newUUID),
-          authorId: String(userId),
+          blockId: newUUID,
+          authorId: userId,
           documentId: currentServerDocId,
           index: Number(index + 1),
           version: initialVersion,
-          cipherText: String(combinedCipherText),
-          prevHash: previousHash,
-          epoch: latestKey.epoch
+          epoch: latestKey.epoch,
+          cipherText: combinedCipherText,
+          prevHash: "0"
         }, drk),
         epoch: latestKey.epoch
-      };
-      */
-
-      const fullBlockData = {
-        blockId: String(newUUID),
-        authorId: String(userId),
-        documentId: currentServerDocId,
-        index: Number(index + 1),
-        version: initialVersion,
-        cipherText: String(combinedCipherText),
-        prevHash: previousHash,
-        epoch: latestKey.epoch
-      };
-
-      const blockHash = await BlockCryptoModule.calculateBlockHash(fullBlockData, drk);
-      const { authorId, ...serverData } = fullBlockData; 
-      const dataToSend = {
-        ...serverData,
-        hash: blockHash
       };
 
       // gui data len server
@@ -460,7 +523,7 @@ const DocumentEditor = ({ onLogout, socket }) => {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify(dataToSend)
+        body: JSON.stringify(blockData)
       });
 
       if (!response.ok) {
@@ -469,8 +532,8 @@ const DocumentEditor = ({ onLogout, socket }) => {
       }
 
       // luu indexDB
-      await createBlockVersionLocal(userId, { ...fullBlockData, hash: blockHash });
-      const newBlockForUI = { ...fullBlockData, hash: blockHash, content: "", id: newUUID };
+      await createBlockVersionLocal(userId, blockData);
+      const newBlockForUI = { blockData, content: "", id: newUUID };
       const newBlocksArray = [...blocks];
       newBlocksArray.splice(index + 1, 0, newBlockForUI);
       
@@ -607,7 +670,8 @@ const DocumentEditor = ({ onLogout, socket }) => {
         let publicKey = null;
 
         // kiem tra indexDB
-        const myIdentity = await db.get('identityKey', userName);
+        //const myIdentity = await db.get('identityKey', userName);
+        const myIdentity = await getMyKey(userName);
         if (myIdentity && myIdentity.publicKey) {
           publicKey = myIdentity.publicKey;
         } else {
@@ -619,18 +683,19 @@ const DocumentEditor = ({ onLogout, socket }) => {
         // Nếu vẫn không có, gọi API
         if (!publicKey) {
           const response = await axios.get(`${process.env.REACT_APP_API_URL}/users/${userId}`);
-          publicKey = response.data.data?.identityKey || response.data.data?.IdentityKey;
+          publicKey = response.data?.identityKey || response.data?.IdentityKey;
+          console.log(response)
         }
+        
 
         if (!publicKey) throw new Error("Không tìm thấy Public Key để mã hóa tài liệu.");
          // luu lai vao indexDB
-          await db.put("publicKeys", {
-            userId: userId,
-            userName: userName,
-            publicKey: publicKey,
-            createdAt: new Date()
-          });
-
+        //  await saveMyKey(userName, { 
+        //    userId: userId,
+        //     userName: userName,
+        //     publicKey: publicKey,
+        //     createdAt: new Date()
+        //   });
         // Ma hoa newDRK
         const encryptedDRK = await BlockCryptoModule.encryptWithPublicKey(publicKey, newDrk);
         console.log("Dữ liệu DRK đã mã hóa:", encryptedDRK);
@@ -769,6 +834,7 @@ const DocumentEditor = ({ onLogout, socket }) => {
               onEnter={() => handleAddBlock(index)}
               fontFamily={fontFamily} 
               formats={textFormats}
+              socket={ socket}
             />
           ))}
           <button className="add-block-btn" onClick={() => handleAddBlock(blocks.length - 1)}><Plus size={18} /> Add New Block</button>

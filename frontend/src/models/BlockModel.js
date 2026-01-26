@@ -11,7 +11,7 @@ export const createClientBlock = (data) => {
     prevHash: data.prevHash,
     hash: data.hash,
     createdAt: data.createdAt || new Date(),
-
+    
 
   };
 };

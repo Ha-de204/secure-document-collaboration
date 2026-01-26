@@ -22,5 +22,10 @@ router.get(
   docKeyController.getDocKeys
 )
 
+router.get(
+  '/:documentId/version/:epoch',
+  auth,
+  docKeyController.getDocKeyByEpoch
+)
 
 module.exports = router
