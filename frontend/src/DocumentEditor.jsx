@@ -753,6 +753,14 @@ useEffect(() => {
 
   const handleBlockBlur = (id) => {
     setActiveBlockId(null);
+    const el = document.getElementById(`block-${id}`);
+    if (el) {
+      el.style.backgroundColor = "transparent";
+      el.style.backgroundColor = ""; 
+      el.style.borderColor = "";
+      el.style.borderWidth = "";
+      el.blur();
+    }
     if (socket && id) {
         setTimeout(() => {
             socket.emit('block:unlock', { blockId: id });
@@ -889,7 +897,11 @@ useEffect(() => {
 
   if (response.ok) {
     const el = document.getElementById(`block-${id}`);
-    if (el) el.style.backgroundColor = "#f0f7ff"; // Màu khi đang được active
+    if (el) {
+      el.style.borderColor = "#dd83dd"; 
+    el.style.borderStyle = "solid";
+    el.style.borderWidth = "2px";
+    }; 
     
     setActiveBlockId(id);
     socket?.emit('block:lock', { blockId: id });
@@ -909,6 +921,9 @@ const resetAutoUnlockTimer = (id) => {
     const el = document.getElementById(`block-${id}`);
     if (el) {
       el.style.backgroundColor = "transparent";
+      el.style.backgroundColor = ""; 
+      el.style.borderColor = "";
+      el.style.borderWidth = "";
       el.blur();
     }
 
@@ -1271,15 +1286,6 @@ const selectHistoryVersion = async (versionId) => {
         </div>
       </div>
     )}
-    <div className="invite-section">
-        <input
-          type="text"
-          placeholder="Nhập ID người dùng để mời"
-          value={inviteeId}
-          onChange={(e) => setInviteeId(e.target.value)}
-        />
-        <button onClick={handleInviteUser}>Mời người dùng</button>
-      </div>
     </div>
   );
 };

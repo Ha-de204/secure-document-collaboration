@@ -178,7 +178,8 @@ const invite = async () => {
     }; 
 
   return (
-    <div className="block-wrapper">
+    <div className="block-wrapper"id={`block-${block.blockId || block.id}`}>
+      
       {isLocked && (
         <div className="lock-badge">
           <span role="img" aria-label="lock">🔒</span> 
