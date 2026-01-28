@@ -1,8 +1,10 @@
 import { getDB } from '../storage/indexDbService';
 import { createClientDocument } from '../models/DocumentModel';
 import { getCurrentUserId, canWrite } from '../helps/PermissionsHelper';
-import{ getPublicKey } from './PublicKeyService';
-import { normalizeId } from '../utils/normalizeId';
+import { getPublicKey } from './PublicKeyService';
+import axios from 'axios';
+import { getMyKey } from './IdentityKy';
+import { encryptRSA, signWithECDSA } from '../crypto/lib2';
 
 export const searchDocumentClient = async ({ keyword = null }) => {
   const db = await getDB();
@@ -152,4 +154,40 @@ export const getAccessIds = async (document) => {
     userId: id,
     publicKey: await getPublicKey(id)
   })));
+};
+
+export const inviteUserToDocument = async (documentId, inviteeId, drk) => {
+  try {
+    // Lấy public key của người được mời
+    const inviteePublicKey = await getPublicKey(inviteeId);
+    if (!inviteePublicKey) {
+      throw new Error('Public key of invitee not found');
+    }
+
+    // Lấy private key của người mời
+    const inviterPrivateKey = await getMyKey();
+    if (!inviterPrivateKey) {
+      throw new Error('Private key of inviter not found');
+    }
+
+    // Mã hóa DRK bằng public key của người được mời
+    const encryptedDrk = encryptRSA(drk, inviteePublicKey);
+
+    // Ký DRK đã mã hóa bằng private key của người mời
+    const signature = signWithECDSA(encryptedDrk, inviterPrivateKey);
+
+    // Gửi lời mời đến backend
+    const response = await axios.post('/api/invites', {
+      documentId,
+      inviteeId,
+      encryptedDrk,
+      signature,
+      permission: 'write'
+    });
+
+    return response.data;
+  } catch (error) {
+    console.error('[DocumentService][inviteUserToDocument]', error);
+    throw error;
+  }
 };

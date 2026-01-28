@@ -96,7 +96,8 @@ const updateDocument = async (
     epoch,
     title,
     metadata = null,
-    publicMetadata = null
+    publicMetadata = null,
+    shareWith = null
 ) => {
     const document = await Document.findById(documentId);
     if(!document){
@@ -118,6 +119,7 @@ const updateDocument = async (
     if(epoch) update.epoch = epoch;
     if(metadata) update.metadata = metadata;
     if(publicMetadata !== null) update.publicMetadata = publicMetadata;
+    if(shareWith) update.shareWith = shareWith;
    
     document.set(update);
     await document.save();
@@ -155,7 +157,10 @@ const grantPrivileges = async (ownerId, userId,documentId,permission) => {
         alreadyShared.permissions = permission;
     }
     else{
-        document.shareWith.push({userId});
+        document.shareWith.push({
+            userId: userId,
+            permissions: permission
+        });
     }
 
     await document.save();

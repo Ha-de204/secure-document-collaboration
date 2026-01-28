@@ -81,7 +81,10 @@ const getDocKeys = async (req, res) => {
       }
     }
 
-    return res.json(result)
+    return res.json({
+      status: true,
+      data: result.data
+    })
   } catch (err) {
     console.error('[DocKeyController][get]', err)
     return res.status(500).json({

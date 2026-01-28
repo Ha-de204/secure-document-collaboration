@@ -29,7 +29,7 @@ const NUMBER_STYLES = [
   { label: 'A. B. C.', value: 'upper-alpha', variant: 'number-variant-3' }
 ];
 
-export const Header = ({ title, onTitleChange, savingStatus, onNewDocument, onUndo, onRedo, canUndo, canRedo, zoom, onZoomChange, fontFamily, onFontChange, fontSize, onFontSizeChange, format = {},  onFormat, onColorChange, onAlign, activeBlockId, userName, onLogout }) => {
+export const Header = ({ title, onTitleChange, savingStatus, onNewDocument, onUndo, onRedo, canUndo, canRedo, zoom, onZoomChange, fontFamily, onFontChange, fontSize, onFontSizeChange, format = {},  onFormat, onColorChange, onAlign, activeBlockId, userName, onLogout, onInviteUser, socket, documentId, isOwner }) => {
   const [showFileMenu, setShowFileMenu] = useState(false);
   const [showDownloadSub, setShowDownloadSub] = useState(false);
   const [showZoomMenu, setShowZoomMenu] = useState(false);
@@ -620,12 +620,24 @@ export const Header = ({ title, onTitleChange, savingStatus, onNewDocument, onUn
           <div className="share-wrapper" style={{ position: 'relative' }}>
             <button 
               className="share-btn" 
-              onClick={() => setShowSharePopup(!showSharePopup)}
+              onClick={() => {
+                if (!isOwner) {
+                  alert("❌ Chỉ chủ sở hữu tài liệu mới được mời người khác!");
+                  return;
+                }
+                setShowSharePopup(!showSharePopup);
+              }}
+              disabled={!isOwner}
+              title={isOwner ? "Chia sẻ tài liệu" : "Chỉ chủ sở hữu mới được mời"}
+              style={{
+                opacity: isOwner ? 1 : 0.5,
+                cursor: isOwner ? 'pointer' : 'not-allowed'
+              }}
             >
               <Share2 size={16} /> Chia sẻ <ChevronDown size={14} />
             </button>
 
-            {showSharePopup && (
+            {showSharePopup && isOwner && (
               <div className="share-popup-dropdown" style={{ width: '300px', padding: '16px' }}>
                 <div style={{ marginBottom: '12px' }}>
                   <label style={{ fontSize: '14px', fontWeight: '500', display: 'block', marginBottom: '8px' }}>
@@ -655,9 +667,15 @@ export const Header = ({ title, onTitleChange, savingStatus, onNewDocument, onUn
                         fontWeight: '500'
                       }}
                       onClick={() => {
-                        console.log("Mời user:", inviteUser);
-                        // Thêm logic gửi invite của bạn ở đây
-                        setInviteUser("");
+                        if (!inviteUser.trim()) {
+                          alert("Vui lòng nhập tên người dùng!");
+                          return;
+                        }
+                        if (onInviteUser) {
+                          onInviteUser(inviteUser);
+                          setInviteUser("");
+                          setShowSharePopup(false);
+                        }
                       }}
                     >
                       Gửi

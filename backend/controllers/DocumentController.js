@@ -87,7 +87,7 @@ const updateDocument = async (req, res) => {
     try {
         const userId = req.user.userId;
         const { documentId } = req.params;
-        const { title, epoch, metadata, publicMetadata } = req.body;
+        const { title, epoch, metadata, publicMetadata, shareWith } = req.body;
 
         const result = await documentService.updateDocument(
             userId,
@@ -95,7 +95,8 @@ const updateDocument = async (req, res) => {
             epoch,
             title,
             metadata,
-            publicMetadata
+            publicMetadata,
+            shareWith
         );
 
         if (!result.status) {
@@ -221,6 +222,37 @@ const deleteDocument = async (req, res) => {
     }
 };
 
+const getDocumentContent = async (req, res) => {
+    try {
+        const { documentId } = req.params;
+        const userId = req.user.userId;
+
+        // Lấy tài liệu từ service
+        const result = await documentService.getDocumentById(userId, documentId);
+        if (!result.status) {
+            if (result.error === 'DOCUMENT_NOT_FOUND') {
+                return res.status(HTTP_STATUS.NOT_FOUND).json(result);
+            }
+            if (result.error === 'FORBIDDEN_ACCESS') {
+                return res.status(HTTP_STATUS.FORBIDDEN).json(result);
+            }
+            return res.status(HTTP_STATUS.BAD_REQUEST).json(result);
+        }
+
+        const document = result.data;
+        return res.status(HTTP_STATUS.OK).json({
+            status: true,
+            content: document.content // Giả sử nội dung tài liệu được lưu trong trường `content`
+        });
+    } catch (err) {
+        console.error('[DocumentController][getDocumentContent]', err);
+        return res.status(HTTP_STATUS.INTERNAL_SERVER_ERROR).json({
+            status: false,
+            message: 'Internal server error'
+        });
+    }
+};
+
 module.exports = {
     searchDocuments,
     getDocumentById,
@@ -228,5 +260,6 @@ module.exports = {
     updateDocument,
     grantPrivileges,
     revokePrivileges,
-    deleteDocument
+    deleteDocument,
+    getDocumentContent,
 };

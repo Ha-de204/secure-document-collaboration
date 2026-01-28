@@ -233,7 +233,7 @@ const getBlocksByDocument = async (userId, documentId) => {
     epoch: document.epoch
   })
   .select('blockId version hash index')
-  .sort({ index: 1, version: -1 })
+  .sort({ blockId: 1, version: -1 })
   .lean();
 
   //  Xử lý logic lấy version mới nhất cho mỗi blockId (trong trường hợp 1 epoch có nhiều version)
@@ -244,10 +244,12 @@ const getBlocksByDocument = async (userId, documentId) => {
     }
   }
   
+ const result = Array.from(latestBlocksMap.values())
+    .sort((a, b) => a.index - b.index);
 
   return {
     status: true,
-    data: Array.from(latestBlocksMap.values()),
+    data: result,
     currentEpoch: document.epoch
   };
 };

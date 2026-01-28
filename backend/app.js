@@ -14,7 +14,8 @@ var usersRouter = require('./routes/users.js');
 var blockRouter = require('./routes/block');
 var documentRouter = require('./routes/document');
 var docKeyRouter = require('./routes/dockey.js')
-const { initSocket } = require('./sockets/socket.js');
+var invitesRouter = require('./routes/invites.js');
+const { initSocket } = require('./sockets/Socket.js');
 const cors = require('cors');
 
 var app = express();
@@ -70,6 +71,7 @@ app.use('/users', usersRouter);
 app.use('/blocks', blockRouter);
 app.use('/documents', documentRouter);
 app.use('/doc-keys', docKeyRouter);
+app.use('/invites', invitesRouter);
 
 // catch 404 and forward to error handler
 app.use(function(req, res, next) {
@@ -84,12 +86,12 @@ app.use(function(err, req, res, next) {
   })
 });
 
-/*
+
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
     console.log(`Server is running on: ${process.env.URL_BACKEND || 'http://localhost:' + PORT}`);
 });
-*/
+
 
 
 module.exports = { app, server };

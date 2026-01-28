@@ -5,10 +5,10 @@ const blockController = require('../controllers/BlockController');
 
 // xin access block
 //const { blockId } = req.params;
-router.get('/access/:documentId', auth, blockController.accessBlock);
+router.get('/access/:blockId', auth, blockController.accessBlock);
 //const { blockId } = req.params;
 // xoa phiên access cua minh, hoac chu so huu xoa phien cua ai do (xoa phien block hien tai trong cache)
-router.delete('/access/:documentId', auth, blockController.removeBlockAccess);
+router.delete('/access/:blockId', auth, blockController.removeBlockAccess);
 // tao version moi cho block
 //const { error, value } = updateBlockDto.validate(req.body);
 /*

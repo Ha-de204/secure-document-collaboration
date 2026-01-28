@@ -38,5 +38,8 @@ router.delete('/:documentId/share/:userId', auth, documentController.revokePrivi
 //const { documentId } = req.params;
 router.delete('/:documentId', auth, documentController.deleteDocument);
 
+// Lấy nội dung tài liệu
+router.get('/:documentId/content', auth, documentController.getDocumentContent);
+
 module.exports = router;
 

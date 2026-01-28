@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { io } from 'socket.io-client';
 import DocumentEditor from './DocumentEditor';
 import Auth from './Auth';
+import InviteNotification from './components/InviteNotification';
 import './styles/auth.css';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 
@@ -9,6 +10,7 @@ function App() {
   const [token, setToken] = useState(localStorage.getItem('accessToken'));
   const [socket, setSocket] = useState(null);
   const [isChecking, setIsChecking] = useState(true);
+  const [showInvites, setShowInvites] = useState(false);
 
   useEffect(() => {
     // 1. check phiên làm viêc
@@ -25,7 +27,9 @@ function App() {
           const data = await response.json();
           if (data.accessToken) {
             localStorage.setItem('accessToken', data.accessToken);
-            setToken(data.accessToken); 
+            setToken(data.accessToken);
+            // Show invite notification khi login
+            setShowInvites(true);
           }
         } else {
           // Nếu RefreshToken hết hạn hoặc không có, bắt đăng nhập lại
@@ -52,7 +56,17 @@ function App() {
         transports: ['polling', 'websocket']
       });
       setSocket(newSocket);
-      return () => newSocket.disconnect();
+
+      // Lắng nghe sự kiện invite mới từ server
+      newSocket.on('newInvite', (data) => {
+        console.log('Bạn có lời mời mới:', data);
+        // Hiển thị thông báo lời mời
+        setShowInvites(true);
+      });
+
+      return () => {
+        newSocket.disconnect();
+      };
     }else {
       setSocket(null);
     }
@@ -61,6 +75,13 @@ function App() {
   const handleLogout = () => {
     localStorage.removeItem('accessToken');
     setToken(null);
+    setShowInvites(false);
+  };
+
+  const handleInviteAccepted = (documentId) => {
+    // Redirect đến document sau khi accept
+    setShowInvites(false);
+    window.location.href = `/document/${documentId}`;
   };
 
   if (isChecking) return <div>Đang tải phiên làm việc...</div>;
@@ -68,6 +89,12 @@ function App() {
   return (
    <BrowserRouter>
       <div className="App">
+        {showInvites && token && (
+          <InviteNotification 
+            onInviteAccepted={handleInviteAccepted}
+            onClose={() => setShowInvites(false)}
+          />
+        )}
         <Routes>
           {!token ? (
             // Route cho người chưa đăng nhập

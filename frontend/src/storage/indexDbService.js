@@ -14,6 +14,7 @@ export const getDB = async () => {
         blocks.createIndex('by-document', 'documentId');
         blocks.createIndex('by-blockId', 'blockId');  
         blocks.createIndex('by-doc-block', ['documentId', 'blockId']);
+        
       }
       if (!db.objectStoreNames.contains('identityKey')) {
         db.createObjectStore('identityKey', { keyPath: 'id' });

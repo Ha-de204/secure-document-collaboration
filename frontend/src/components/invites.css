@@ -1,0 +1,189 @@
+.invite-notification-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.invite-notification-modal {
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  max-width: 500px;
+  width: 90%;
+  max-height: 80vh;
+  overflow-y: auto;
+  animation: slideIn 0.3s ease-out;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.invite-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px;
+  border-bottom: 1px solid #ddd;
+}
+
+.invite-header h3 {
+  margin: 0;
+}
+
+.invite-header button {
+  background: none;
+  border: none;
+  font-size: 16px;
+  cursor: pointer;
+}
+
+.invite-header button:hover {
+  color: red;
+}
+
+ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+li {
+  padding: 15px;
+  border-bottom: 1px solid #ddd;
+}
+
+li p {
+  margin: 5px 0;
+}
+
+li button {
+  background: #007bff;
+  color: white;
+  border: none;
+  padding: 10px 15px;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+li button:hover {
+  background: #0056b3;
+}
+
+.invite-list {
+  padding: 15px;
+}
+
+.invite-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 15px;
+  border: 1px solid #e0e0e0;
+  border-radius: 6px;
+  margin-bottom: 12px;
+  background: #f9f9f9;
+  transition: all 0.2s;
+}
+
+.invite-item:hover {
+  background: #f5f5f5;
+  border-color: #667eea;
+  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.1);
+}
+
+.invite-info {
+  flex: 1;
+  padding-right: 15px;
+}
+
+.invite-from,
+.invite-doc,
+.invite-permission,
+.invite-time {
+  margin: 5px 0;
+  font-size: 14px;
+  color: #333;
+}
+
+.invite-from strong,
+.invite-doc strong {
+  color: #667eea;
+  font-weight: 600;
+}
+
+.perm-badge {
+  display: inline-block;
+  padding: 3px 8px;
+  background: #667eea;
+  color: white;
+  border-radius: 3px;
+  font-size: 12px;
+  font-weight: 500;
+  text-transform: uppercase;
+}
+
+.invite-time {
+  color: #999;
+  font-size: 12px;
+}
+
+.invite-actions {
+  display: flex;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.btn-accept,
+.btn-reject {
+  padding: 8px 12px;
+  border: none;
+  border-radius: 4px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.btn-accept {
+  background: #4caf50;
+  color: white;
+}
+
+.btn-accept:hover {
+  background: #45a049;
+  transform: translateY(-2px);
+  box-shadow: 0 2px 8px rgba(76, 175, 80, 0.3);
+}
+
+.btn-reject {
+  background: #f44336;
+  color: white;
+}
+
+.btn-reject:hover {
+  background: #da190b;
+  transform: translateY(-2px);
+  box-shadow: 0 2px 8px rgba(244, 67, 54, 0.3);
+}
+
+.invite-notification {
+  padding: 20px;
+  text-align: center;
+  color: #999;
+}

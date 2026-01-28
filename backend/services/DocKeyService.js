@@ -22,17 +22,13 @@ const createDocKey = async (ownerId, {
         }
     }
 
-    const existed = await DocKey.findOne({
-        documentId,
-        userId,
-        epoch
-    })
-
-    if (existed) {
-        return{
+    // Kiểm tra nếu doc-key đã tồn tại
+    const existingKey = await DocKey.findOne({ documentId, userId, epoch });
+    if (existingKey) {
+        return {
             status: false,
-            error: 'ALREADY_EXISTS'
-        }
+            error: 'DOC_KEY_ALREADY_EXISTS',
+        };
     }
 
     const docKey = await DocKey.create({

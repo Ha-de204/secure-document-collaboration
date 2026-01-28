@@ -398,6 +398,7 @@ const BlockCryptoModule = {
   // vertify 1 dai version cua 1 block vs chung blockId
   async verifyBatchBlocks(payload,lastestLocalBlock, ownerPublicKey) {
   const userName = localStorage.getItem('userName');
+  const userId = localStorage.getItem('userId');
   const { blocks, keys } = payload.data;
   if (!blocks || blocks.length === 0) return { status: true };
 
@@ -440,9 +441,9 @@ const BlockCryptoModule = {
       return { status: false, error: 'HASH_MISMATCH', version: block.version };
     }
     //luu va indexdb
-    await createBlockVersionLocal({
+    await createBlockVersionLocal(userId, {
         blockId: block.blockId,
-        documentId: block.documentId,
+        documentId: block.documentId?._id || block.documentId,
         index: block.index,
         version: block.version,
         epoch: block.epoch,
