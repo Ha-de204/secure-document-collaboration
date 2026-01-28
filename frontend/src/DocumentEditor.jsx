@@ -9,13 +9,13 @@ import BlockCryptoModule from "./crypto/BlockManager";
 import { getDB } from './storage/indexDbService';
 import { getPublicKey, savePublicKey } from './services/PublicKeyService';
 import { getMyKey } from './services/IdentityKy';
-import { createBlockVersionLocal, getLatestBlocksLocal } from './services/BlockService';
+import { createBlockVersionLocal, getLatestBlocksLocal, getBlockHistory } from './services/BlockService';
 import DocumentKeyService from './services/DRKService';
 import { saveDocumentLocally, getLocalDocument } from './services/DocumentService';
 import axios from 'axios';
 import { unlockIdentity } from './crypto/IdentityManager';
 import { inviteUserToDocument } from './services/DocumentService';
-
+import "./document.css"
 const DocumentEditor = ({ onLogout, socket }) => {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -34,7 +34,8 @@ const DocumentEditor = ({ onLogout, socket }) => {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [history, setHistory] = useState([[]]);
   const [publicKey, setPublicKey] = useState(new Map());
-
+  const [isOpenHistory, setIsOpenHistory] = useState(false);
+  const [historyBlock, setHistoryBlock] = useState([])
   const isRestoringHistory = useRef(false);
   const [zoom, setZoom] = useState(100);
   const [fontFamily, setFontFamily] = useState("Arial");                                    
@@ -43,6 +44,7 @@ const DocumentEditor = ({ onLogout, socket }) => {
   const historyRef = useRef(history);
   const indexRef = useRef(0);
   const blocksRef = useRef(blocks);
+  const lastFocusedBlockIdRef = useRef(null);
   const hasPendingHistory = useRef(false);
   const [textFormats, setTextFormats] = useState({
     bold: false,
@@ -52,7 +54,6 @@ const DocumentEditor = ({ onLogout, socket }) => {
     color: '#000000'
   });
   const drkMapRef = useRef(new Map());
-  const [inviteeId, setInviteeId] = useState('');
 
   const cloneBlocks = (blocks) => blocks.map(b => ({ ...b }));
   
@@ -904,6 +905,7 @@ useEffect(() => {
     }; 
     
     setActiveBlockId(id);
+    lastFocusedBlockIdRef.current = id;
     socket?.emit('block:lock', { blockId: id });
 
     resetAutoUnlockTimer(id);
@@ -1164,13 +1166,20 @@ const resetAutoUnlockTimer = (id) => {
 
 
 
-  // Sửa modal để chỉ lấy block từ local, giải mã và xử lý như thay đổi block
-const [historyModal, setHistoryModal] = useState({ isOpen: false, blockId: null, versions: [] });
+const pickByStep = (versions) => {
+  const total = versions.length;
 
-const openHistoryModal = async (blockId) => {
+  let step = 1;
+  if (total > 20) step = 4;
+  if (total > 50) step = 8;
+  if (total > 100) step = 10;
+  if (total > 300) step = 30;
+
+  return versions.filter((_, index) => index % step === 0);
+};
+const loadHistory = async (blockId) => {
   try {
-    const db = await getDB();
-    const versions = await db.getAll("blockHistory", blockId);
+    const versions = await getBlockHistory(blockId)
 
     // Giải mã nội dung plaintext cho từng phiên bản
     const decryptedVersions = await Promise.all(
@@ -1190,37 +1199,99 @@ const openHistoryModal = async (blockId) => {
         }
       })
     );
-
-    setHistoryModal({ isOpen: true, blockId, versions: decryptedVersions });
+    const decrypted = decryptedVersions.sort((a, b) => b.version - a.version);
+    const sampledVersions = pickByStep(decrypted);
+    return sampledVersions
   } catch (error) {
     console.error("Lỗi khi tải lịch sử block:", error);
     alert("Không thể tải lịch sử block.");
   }
 };
 
-const closeHistoryModal = () => {
-  setHistoryModal({ isOpen: false, blockId: null, versions: [] });
-};
 
-const selectHistoryVersion = async (versionId) => {
+
+const selectHistoryVersion = async (version) => {
   try {
-    const selectedVersion = historyModal.versions.find((v) => v.id === versionId);
-    if (!selectedVersion) {
-      alert("Không tìm thấy phiên bản này.");
-      return;
-    }
+    const selectedVersion = historyBlock.find((v) => (v.version === version) && (v.blockId === lastFocusedBlockIdRef.current));
+    if (!selectedVersion) return alert("Không tìm thấy phiên bản này.");
 
-    // Xử lý như thay đổi block
-    handleBlockChange(historyModal.blockId, selectedVersion.plaintext);
-    closeHistoryModal();
+    const targetId = lastFocusedBlockIdRef.current;
+    if (!targetId) return alert("Vui lòng chọn block cần khôi phục!");
+
+    const currentBlock = blocksRef.current.find(b => (b.blockId || b.id) === targetId);
+    if (!currentBlock) return;
+
+    const blockDRK = drkMapRef.current.get(currentBlock.epoch);
+    if (!blockDRK) throw new Error("Không tìm thấy khóa giải mã (DRK)");
+
+    const encrypted = await BlockCryptoModule.encryptBlock(selectedVersion.plaintext, blockDRK, targetId);
+    const combined = `${encrypted.iv}:${encrypted.cipherText}`;
+    const newVersion = (currentBlock.version || 0) + 1;
+
+    const updatedBlock = {
+      ...currentBlock,
+      content: selectedVersion.plaintext, 
+      cipherText: combined,
+      version: newVersion,
+      prevHash: currentBlock.hash,
+    };
+
+    const newHash = await BlockCryptoModule.calculateBlockHash(updatedBlock, blockDRK);
+    updatedBlock.hash = newHash;
+    const dataToServer = {
+      blockId: updatedBlock.blockId,
+      documentId: updatedBlock.documentId,
+      index: updatedBlock.index,
+      version: updatedBlock.version,
+      epoch: updatedBlock.epoch,
+      cipherText: updatedBlock.cipherText,
+      prevHash: updatedBlock.prevHash,
+      hash: updatedBlock.hash
+    }
+    setBlocks(prev => prev.map(b => (b.blockId || b.id) === targetId ? updatedBlock : b));
+
+    const token = localStorage.getItem('accessToken');
+    await fetch(`${process.env.REACT_APP_API_URL}/blocks/${id}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(dataToServer),
+    });
+
+
+    socket?.emit("block:update", { 
+      documentId: id, 
+      blockId: targetId, 
+      cipherText: combined, 
+      epoch: currentBlock.epoch, 
+      version: newVersion 
+    });
+
+    setIsOpenHistory(false);
+    alert(`Đã khôi phục về phiên bản v.${selectedVersion.version}`);
+
   } catch (error) {
-    console.error("Lỗi khi khôi phục phiên bản:", error);
-    alert("Không thể khôi phục phiên bản.");
+    console.error("Lỗi khôi phục:", error);
+    alert("Có lỗi xảy ra khi khôi phục dữ liệu.");
   }
 };
 
+const handleToggleSidebar = async () => {
+  if (!isOpenHistory) {
+   if (!lastFocusedBlockIdRef.current) return alert("Chọn một đoạn để xem lịch sử!");
+    
+    const decrypted = await loadHistory(lastFocusedBlockIdRef.current)
+    setHistoryBlock(decrypted);
+    setIsOpenHistory(true);
+  } else {
+    setIsOpenHistory(false);
+  }
+};
   return (
     <div className="editor-container">
+      
       <Header 
         title={docTitle} 
         onTitleChange={setDocTitle} 
@@ -1247,7 +1318,12 @@ const selectHistoryVersion = async (versionId) => {
         socket={socket}
         documentId={id}
         isOwner={isOwner}
+        handleToggleSidebar={handleToggleSidebar}
       />
+      <div className="editor-layout" style = {{
+        display: 'flex'
+      }}
+      >
       <main className="editor-main">
         <div className="document-paper" style={{ transform: `scale(${zoom / 100})`, transformOrigin: 'top center', fontFamily: fontFamily }}>
           {blocks.map((block, index) => (
@@ -1268,24 +1344,55 @@ const selectHistoryVersion = async (versionId) => {
           <button className="add-block-btn" onClick={() => handleAddBlock(blocks.length - 1)}><Plus size={18} /> Add New Block</button>
         </div>
       </main>
-      <Footer />
-      {historyModal.isOpen && (
-      <div className="history-modal">
-        <div className="modal-content">
-          <h3>Lịch sử Block</h3>
-          <ul>
-            {historyModal.versions.map((version) => (
-              <li key={version.id}>
-                <span>Phiên bản: {version.version}</span>
-                <p>Nội dung: {version.plaintext}</p>
-                <button onClick={() => selectHistoryVersion(version.id)}>Chọn</button>
-              </li>
-            ))}
-          </ul>
-          <button onClick={closeHistoryModal}>Đóng</button>
-        </div>
+      {isOpenHistory && (
+      <div className={`history-sidebar ${isOpenHistory ? 'open' : ''}`}>
+      <div className="sidebar-header">
+        <h3>Lịch sử đoạn văn</h3>
+        <button onClick={() => setIsOpenHistory(false)}>✕</button>
       </div>
-    )}
+
+      <div className="sidebar-content">
+        {historyBlock.length === 0 ? (
+          <p className="empty-msg">Chưa có lịch sử cho đoạn này</p>
+        ) : (
+          historyBlock.map((v, index) => (
+            <div key = {`${v.blockId}-${v.version}`} className="history-row">
+              
+              {/* Timeline */}
+              <div className="timeline">
+                <span className="dot" />
+                {index !== historyBlock.length - 1 && <span className="line" />}
+              </div>
+
+              {/* Nội dung */}
+              <div className="history-content">
+                <div className="content-preview">
+                  {v.plaintext
+                    ? v.plaintext.replace(/<[^>]*>/g, '').substring(0, 80)
+                    : '...'}
+                </div>
+
+                <button
+                  className="restore-btn"
+                  onClick={() => {
+                    selectHistoryVersion(v.version)
+                    //setIsOpenHistory(false);
+                  }}
+                >
+                  Khôi phục
+                </button>
+              </div>
+
+            </div>
+          ))
+        )}
+      </div>
+
+    </div>
+      )}
+    </div>
+      <Footer />
+
     </div>
   );
 };

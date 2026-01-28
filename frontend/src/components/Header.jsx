@@ -29,7 +29,11 @@ const NUMBER_STYLES = [
   { label: 'A. B. C.', value: 'upper-alpha', variant: 'number-variant-3' }
 ];
 
-export const Header = ({ title, onTitleChange, savingStatus, onNewDocument, onUndo, onRedo, canUndo, canRedo, zoom, onZoomChange, fontFamily, onFontChange, fontSize, onFontSizeChange, format = {},  onFormat, onColorChange, onAlign, activeBlockId, userName, onLogout, onInviteUser, socket, documentId, isOwner }) => {
+export const Header = ({ title, onTitleChange, savingStatus, 
+  onNewDocument, onUndo, onRedo, canUndo, canRedo, zoom, onZoomChange, 
+  fontFamily, onFontChange, fontSize, onFontSizeChange, format = {},  
+  onFormat, onColorChange, onAlign, activeBlockId, userName, onLogout,
+   onInviteUser, socket, documentId, isOwner, handleToggleSidebar }) => {
   const [showFileMenu, setShowFileMenu] = useState(false);
   const [showDownloadSub, setShowDownloadSub] = useState(false);
   const [showZoomMenu, setShowZoomMenu] = useState(false);
@@ -54,7 +58,6 @@ export const Header = ({ title, onTitleChange, savingStatus, onNewDocument, onUn
   const [showSharePopup, setShowSharePopup] = useState(false);
   const [copyStatus, setCopyStatus] = useState("Sao chép đường liên kết");
   const [inviteUser, setInviteUser] = useState("");
-
   const saveSelection = () => {
     const sel = window.getSelection();
     if (sel.getRangeAt && sel.rangeCount) {
@@ -615,7 +618,7 @@ export const Header = ({ title, onTitleChange, savingStatus, onNewDocument, onUn
           </div>
         </div>
         <div className="header-right">
-          <History size={32} className="right-icon" />
+          <History size={32} className="right-icon" onClick={handleToggleSidebar} />
           
           <div className="share-wrapper" style={{ position: 'relative' }}>
             <button 
