@@ -485,8 +485,8 @@ useEffect(() => {
                 b.blockId === blockId || b.id === blockId
               );
 
-              if (existingIndex === -1 && isNew) {
-                blocks.splice(index ?? blocks.length, 0, {
+              if (existingIndex === -1) {
+                const newBlock = {
                   blockId,
                   content: plainText,
                   version: version || 1,
@@ -494,7 +494,13 @@ useEffect(() => {
                   epoch: blockEpoch,
                   status: "saved",
                   editorName: userId
-                });
+                };
+                if (isNew) {
+                  const insertAt = (typeof index === 'number') ? index : blocks.length;
+                  blocks.splice(insertAt, 0, newBlock);
+                } else {
+                  blocks.push(newBlock);
+                }
               }
 
               else {
