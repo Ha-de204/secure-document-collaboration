@@ -356,6 +356,7 @@ useEffect(() => {
             // Nếu là doc mới tạo, block rỗng
             if (latestBlocks.length === 0) {
               setBlocks([]);
+              blocksRef.current = [];
               addToHistory([]);
             } else {
               const decryptedBlocks = await Promise.all(latestBlocks.map(async (b) => {
