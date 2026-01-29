@@ -881,7 +881,12 @@ useEffect(() => {
   if (timeoutsRef.current[id]) {
     clearTimeout(timeoutsRef.current[id]);
   }
-
+  const el = document.getElementById(`block-${id}`);
+    if (el) {
+    el.style.borderColor = "#dd83dd"; 
+    el.style.borderStyle = "solid";
+    el.style.borderWidth = "2px";
+    }; 
   const token = localStorage.getItem('accessToken');
   const response = await fetch(`${process.env.REACT_APP_API_URL}/blocks/access/${id}`, {
     method: 'GET',
@@ -891,18 +896,17 @@ useEffect(() => {
   if (response.status === 403) {
     alert("Block đang được người khác chỉnh sửa. Vui lòng thử lại sau!");
     console.warn("Block bị khóa!");
+    if(el){
+      el.style.borderColor = "transparent"; 
+    el.style.borderStyle = "";
+    el.style.borderWidth = "";
+    }
     document.activeElement.blur();
     document.getElementById('editor-container')?.focus();
     return;
   }
 
   if (response.ok) {
-    const el = document.getElementById(`block-${id}`);
-    if (el) {
-      el.style.borderColor = "#dd83dd"; 
-    el.style.borderStyle = "solid";
-    el.style.borderWidth = "2px";
-    }; 
     
     setActiveBlockId(id);
     lastFocusedBlockIdRef.current = id;
@@ -1170,7 +1174,7 @@ const pickByStep = (versions) => {
   const total = versions.length;
 
   let step = 1;
-  if (total > 20) step = 4;
+  if (total > 15) step = 5;
   if (total > 50) step = 8;
   if (total > 100) step = 10;
   if (total > 300) step = 30;
