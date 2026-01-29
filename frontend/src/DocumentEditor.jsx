@@ -203,7 +203,64 @@ const DocumentEditor = ({ onLogout, socket }) => {
   }
 };
 
-useEffect(() => {
+const syncDocumentData = async () => {
+  // Không sync nếu đang trong quá trình lưu để tránh xung đột
+  if (savingStatus === 'saving') return;
+
+  try {
+    const response = await axios.get(`${process.env.REACT_APP_API_URL}/documents/${id}`, {
+      headers: { Authorization: `Bearer ${localStorage.getItem('accessToken')}` }
+    });
+    console.log("Đồng bộ định kỳ với server:", response.data);
+
+    const latestBlocks = response.data.blocks;
+    if (!latestBlocks) return;
+
+    // Giải mã dữ liệu mới từ server
+    const decryptedBlocks = await Promise.all(latestBlocks.map(async (b) => {
+      const blockEpoch = b.epoch ?? 0;
+      const correctDrk = drkMapRef.current.get(blockEpoch);
+      let plainText = "";
+      if (correctDrk && b.cipherText && b.cipherText.includes(':')) {
+        const [iv, cipher] = b.cipherText.split(':');
+        plainText = await cryptoRef.current.decryptBlock(cipher, iv, correctDrk, b.blockId);
+      }
+      return { 
+        ...b, 
+        content: plainText, 
+        id: b.blockId, 
+        blockId: b.blockId,
+        status: 'saved' 
+      };
+    }));
+
+    // Cập nhật State một cách thông minh
+    setBlocks(prev => {
+      return decryptedBlocks.map(serverBlock => {
+        // Nếu là block người dùng đang gõ (active), GIỮ NGUYÊN nội dung local
+        if (serverBlock.blockId === activeBlockId) {
+          const localActive = prev.find(lb => lb.blockId === activeBlockId);
+          return localActive || serverBlock;
+        }
+        
+        // Với các block khác, chỉ cập nhật nếu version server cao hơn
+        const localMatch = prev.find(lb => lb.blockId === serverBlock.blockId);
+        if (!localMatch || serverBlock.version > localMatch.version) {
+          return serverBlock;
+        }
+        return localMatch;
+      });
+    });
+
+    // Luôn đồng bộ Ref để các hàm khác lấy được Hash mới nhất
+    blocksRef.current = decryptedBlocks;
+
+  } catch (error) {
+    console.error("Sync định kỳ thất bại:", error);
+  }
+};
+
+  useEffect(() => {
     if (!id || !socket) return;
 
     socket.emit("document:join", { documentId: id });
@@ -212,6 +269,16 @@ useEffect(() => {
       socket.emit("document:leave", { documentId: id });
     };
   }, [id, socket]);
+
+  useEffect(() => {
+    if (!id || !drk) return;
+
+    const interval = setInterval(() => {
+      syncDocumentData();
+    }, 10000);
+
+    return () => clearInterval(interval);
+  }, [id, drk, activeBlockId, savingStatus]);
 
 
   const isProcessing = useRef(false);
@@ -360,6 +427,7 @@ useEffect(() => {
               addToHistory([]);
             } else {
               const decryptedBlocks = await Promise.all(latestBlocks.map(async (b) => {
+                const finalId = b.blockId || b.id || b._id;
                 try {
                   const dataToDecrypt = b.cipherText || b.content || "";
                   let plainText = "";
@@ -369,18 +437,18 @@ useEffect(() => {
                     const blockDRK = drkMap.get(b.epoch || 0);
 
                     if (!blockDRK) {
-                      console.warn(`Thiếu khóa cho epoch ${b.epoch} của block ${b.blockId}`);
-                      return { ...b, content: "[Nội dung bị khóa hoặc chưa có quyền đọc]", id: b.blockId };
+                      console.warn(`Thiếu khóa cho epoch ${b.epoch} của block ${finalId}`);
+                      return { ...b, content: "[Nội dung bị khóa hoặc chưa có quyền đọc]", id: finalId };
                     }
 
                     plainText = await BlockCryptoModule.decryptBlock(cipherPart, ivPart, blockDRK, b.blockId);
-                    return { ...b, content: plainText, id: b.blockId, blockId: b.blockId, };
+                    return { ...b, content: plainText, id: b.finalId, blockId: finalId, };
                   }
 
                   
-                  return { ...b, content: b.content || "", id: b.blockId, blockId: b.blockId, };
+                  return { ...b, content: b.content || "", id: finalId, blockId: finalId, };
                 } catch (e) {
-                  return { ...b, content: "[Lỗi giải mã]", id: b.blockId };
+                  return { ...b, content: "[Lỗi giải mã]", id: finalId };
                 }
               }));
 
@@ -410,13 +478,13 @@ useEffect(() => {
     };
 
     loadDocumentData();
-  }, [id, addToHistory, navigate]); 
+  }, [id, addToHistory, navigate]);  
 
   // SOCKET LISTENERS
   useEffect(() => {
       if (!socket || !drk) return;
   
-      socket.on("block:locked", ({ blockId, result }) => {
+      socket.on("document:request_access", ({ blockId, result }) => {
       setBlocks(prev =>
         prev.map(b =>
           (b.blockId === blockId || b.id === blockId)
@@ -430,7 +498,7 @@ useEffect(() => {
       );
     });
   
-    socket.on("block:remove-locked", ({ blockId, result }) => {
+    socket.on("document:remove_access", ({ blockId, result }) => {
       setBlocks(prev =>
         prev.map(b =>
           (b.blockId === blockId || b.id === blockId)
@@ -483,12 +551,13 @@ useEffect(() => {
             setBlocks(prev => {
               let blocks = [...prev];
               const existingIndex = blocks.findIndex(b =>
-                b.blockId === blockId || b.id === blockId
+                b.blockId === blockId || b.id === blockId || b._id === blockId
               );
 
               if (existingIndex === -1) {
                 const newBlock = {
                   blockId,
+                  id: blockId,
                   content: plainText,
                   version: version || 1,
                   hash: hash || "0",
@@ -514,7 +583,7 @@ useEffect(() => {
                       ...b,
                       content: plainText,
                       version,
-                      hash,
+                      hash: hash || b.hash,
                       epoch: blockEpoch,
                       status: "editing",
                       editorName: userId
@@ -531,7 +600,7 @@ useEffect(() => {
         }
       });
   
-      socket.on("block:committed", async (payload) => {
+      socket.on("block:commit", async (payload) => {
         try {
           const { blockId, cipherText, epoch, version, hash, prevHash } = payload;
 
@@ -600,10 +669,10 @@ useEffect(() => {
       });
   
       return () => {
-        socket.off("block:locked");
-        socket.off("block:remove-locked");
+        socket.off("document:request_access");
+        socket.off("document:remove_access");
         socket.off("block:editing");
-        socket.off("block:committed");
+        socket.off("block:commit");
         socket.off("document:key_rotated");
       };
     }, [socket, drk, activeBlockId]);
@@ -657,9 +726,26 @@ useEffect(() => {
                     : b
             ));
 
+            const targetIdx = blocksRef.current.findIndex(b => b.blockId === blockId || b.id === blockId);
+            if (targetIdx !== -1) {
+                blocksRef.current[targetIdx].hash = newHash;
+                blocksRef.current[targetIdx].version = updatedVersion;
+            }
+            socket.emit("block:editing", {
+              documentId: id,
+              blockId,
+              cipherText: combined, // Nội dung cuối cùng đã lưu
+              version: updatedVersion,
+              hash: newHash,        // <--- ĐÂY LÀ ĐIỂM QUAN TRỌNG NHẤT
+              userId: userId,
+              epoch: blockToSave.epoch,
+              index: blockIndex,
+              status: "saved"
+            })
+
             await createBlockVersionLocal(userId, finalPayload);
 
-            socket.emit("block:commit", { documentId: id, blockId, cipherText: combined, epoch: blockToSave.epoch, version: updatedVersion, hash: newHash });
+            socket.emit("block:committed", { documentId: id, blockId, cipherText: combined, epoch: blockToSave.epoch, version: updatedVersion, hash: newHash });
 
             setSavingStatus('saved');
         } catch (error) {
@@ -670,7 +756,7 @@ useEffect(() => {
 };
 
   const handleBlockChange = async (blockId, content) => {
-    const currentBlockInState = blocksRef.current.find(b => b.blockId === blockId || b.id === blockId);
+    const currentBlockInState = blocksRef.current.find(b => b.blockId === blockId || b.id === blockId || b._id === blockId);
     if (currentBlockInState && currentBlockInState.content === content) {
       return; 
     }
@@ -680,16 +766,23 @@ useEffect(() => {
     const oldVersion = currentBlockInState ? (currentBlockInState.version || 1) : 1;
     const oldHash = currentBlockInState ? (currentBlockInState.hash || "0") : "0";
     let updatedVersion = oldVersion + 1;
+    
     const userId = localStorage.getItem("userId");
     const blockIndex = currentBlockInState?.index ?? 0;
 
      setBlocks(prev => prev.map(block => {
-      if (block.blockId === blockId || block.id === blockId) {
+      if (block.blockId === blockId || block.id === blockId || block._id === blockId) {
         updatedVersion = (block.version || 1) + 1;
         return { ...block, content, version: updatedVersion };
       }
       return block;
     }));
+
+    const targetIdx = blocksRef.current.findIndex(b => b.blockId === blockId || b.id === blockId || b._id === blockId);
+    if (targetIdx !== -1) {
+        blocksRef.current[targetIdx].content = content;
+        blocksRef.current[targetIdx].version = updatedVersion;
+    }
 
     if (drk && socket) {
       try {
@@ -701,7 +794,7 @@ useEffect(() => {
           blockId,
           cipherText: combined,
           version: updatedVersion,
-          hash: oldHash,
+          hash: null,
           editor: userId,
           ts: Date.now(),
           index: blockIndex,
@@ -872,7 +965,7 @@ useEffect(() => {
             const oldVersion = blockToBlur.version || 1;
             const oldHash = blockToBlur.hash || "0";
             const blockIndex = blocksRef.current.findIndex(b => b.blockId === id || b.id === id);
-            saveBlockToServer(id, currentContent, oldHash, oldVersion + 1, blockToBlur, blockIndex);
+            saveBlockToServer(id, currentContent, oldHash, oldVersion, blockToBlur, blockIndex);
         }
     }
   };
@@ -963,7 +1056,7 @@ useEffect(() => {
       const latestBlockInMemory = blocksRef.current.find(b => b.id === block.id);
       const newVersion = Math.max(block.version || 0, (latestBlockInMemory?.version || 0)) + 1;
 
-      socket.emit("block:commit", { 
+      socket.emit("block:committed", { 
         documentId: id, 
         blockId: block.id, 
         cipherText: combined, 
@@ -1501,4 +1594,3 @@ const handleToggleSidebar = async () => {
 };
 
 export default DocumentEditor;
-
