@@ -23,19 +23,36 @@ const blockSocket = (io, socket, onlineUserNames) => {
         console.error('block:error', err);
         }
     });
-    socket.on('block:editing', ({ documentId, blockId, cipherText }) => {
+    socket.on('block:editing', payload => {
+        const {
+            documentId,
+            blockId,
+            cipherText,
+            version,
+            hash,
+            editor,
+            ts,
+            index,
+            isNew
+        } = payload;
+
         if (!socket.rooms.has(documentId)) return;
 
         socket.to(documentId).emit('block:editing', {
-        blockId,
-        cipherText,
-        userId: socket.user.userId
+            blockId,
+            cipherText,
+            version,
+            hash,
+            editor,
+            ts,
+            index,
+            isNew
         });
     });
 
     socket.on('block:commit', async (payload) => {
         try {
-        const { blockId, cipherText, documentId } = payload;
+        const { blockId, cipherText, documentId, version, epoch, hash, prevHash } = payload;
         if (!socket.rooms.has(documentId)) return;
 
         const document = await Document.findById(documentId).lean();
@@ -51,8 +68,11 @@ const blockSocket = (io, socket, onlineUserNames) => {
         socket.to(documentId).emit('block:committed', {
             blockId,
             cipherText,
-            userId: socket.user.userId
-            
+            userId: socket.user.userId,
+            version,
+            epoch,
+            hash,
+            prevHash
         });
 
         } catch (err) {
