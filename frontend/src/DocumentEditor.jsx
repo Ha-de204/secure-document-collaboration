@@ -205,59 +205,59 @@ const DocumentEditor = ({ onLogout, socket }) => {
 
 const syncDocumentData = async () => {
   // Không sync nếu đang trong quá trình lưu để tránh xung đột
-  if (savingStatus === 'saving') return;
+  // if (savingStatus === 'saving') return;
 
-  try {
-    const response = await axios.get(`${process.env.REACT_APP_API_URL}/documents/${id}`, {
-      headers: { Authorization: `Bearer ${localStorage.getItem('accessToken')}` }
-    });
-    console.log("Đồng bộ định kỳ với server:", response.data);
+  // try {
+  //   const response = await axios.get(`${process.env.REACT_APP_API_URL}/blocks/lastest-version/${id}`, {
+  //     headers: { Authorization: `Bearer ${localStorage.getItem('accessToken')}` }
+  //   });
+  //   console.log("Đồng bộ định kỳ với server:", response.data);
 
-    const latestBlocks = response.data.blocks;
-    if (!latestBlocks) return;
+  //   const latestBlocks = response.data.data;
+  //   if (!latestBlocks) return;
 
-    // Giải mã dữ liệu mới từ server
-    const decryptedBlocks = await Promise.all(latestBlocks.map(async (b) => {
-      const blockEpoch = b.epoch ?? 0;
-      const correctDrk = drkMapRef.current.get(blockEpoch);
-      let plainText = "";
-      if (correctDrk && b.cipherText && b.cipherText.includes(':')) {
-        const [iv, cipher] = b.cipherText.split(':');
-        plainText = await cryptoRef.current.decryptBlock(cipher, iv, correctDrk, b.blockId);
-      }
-      return { 
-        ...b, 
-        content: plainText, 
-        id: b.blockId, 
-        blockId: b.blockId,
-        status: 'saved' 
-      };
-    }));
+  //   // Giải mã dữ liệu mới từ server
+  //   const decryptedBlocks = await Promise.all(latestBlocks.map(async (b) => {
+  //     const blockEpoch = b.epoch ?? 0;
+  //     const correctDrk = drkMapRef.current.get(blockEpoch);
+  //     let plainText = "";
+  //     if (correctDrk && b.cipherText && b.cipherText.includes(':')) {
+  //       const [iv, cipher] = b.cipherText.split(':');
+  //       plainText = await cryptoRef.current.decryptBlock(cipher, iv, correctDrk, b.blockId);
+  //     }
+  //     return { 
+  //       ...b, 
+  //       content: plainText, 
+  //       id: b.blockId, 
+  //       blockId: b.blockId,
+  //       status: 'saved' 
+  //     };
+  //   }));
 
-    // Cập nhật State một cách thông minh
-    setBlocks(prev => {
-      return decryptedBlocks.map(serverBlock => {
-        // Nếu là block người dùng đang gõ (active), GIỮ NGUYÊN nội dung local
-        if (serverBlock.blockId === activeBlockId) {
-          const localActive = prev.find(lb => lb.blockId === activeBlockId);
-          return localActive || serverBlock;
-        }
+  //   // Cập nhật State một cách thông minh
+  //   setBlocks(prev => {
+  //     return decryptedBlocks.map(serverBlock => {
+  //       // Nếu là block người dùng đang gõ (active), GIỮ NGUYÊN nội dung local
+  //       if (serverBlock.blockId === activeBlockId) {
+  //         const localActive = prev.find(lb => lb.blockId === activeBlockId);
+  //         return localActive || serverBlock;
+  //       }
         
-        // Với các block khác, chỉ cập nhật nếu version server cao hơn
-        const localMatch = prev.find(lb => lb.blockId === serverBlock.blockId);
-        if (!localMatch || serverBlock.version > localMatch.version) {
-          return serverBlock;
-        }
-        return localMatch;
-      });
-    });
+  //       // Với các block khác, chỉ cập nhật nếu version server cao hơn
+  //       const localMatch = prev.find(lb => lb.blockId === serverBlock.blockId);
+  //       if (!localMatch || serverBlock.version > localMatch.version) {
+  //         return serverBlock;
+  //       }
+  //       return localMatch;
+  //     });
+  //   });
 
-    // Luôn đồng bộ Ref để các hàm khác lấy được Hash mới nhất
-    blocksRef.current = decryptedBlocks;
+  //   // Luôn đồng bộ Ref để các hàm khác lấy được Hash mới nhất
+  //   blocksRef.current = decryptedBlocks;
 
-  } catch (error) {
-    console.error("Sync định kỳ thất bại:", error);
-  }
+  // } catch (error) {
+  //   console.error("Sync định kỳ thất bại:", error);
+  // }
 };
 
   useEffect(() => {
@@ -480,6 +480,8 @@ const syncDocumentData = async () => {
     loadDocumentData();
   }, [id, addToHistory, navigate]);  
 
+  // Thêm vào DocumentEditor.jsx
+  const editingTimeouts = useRef({});
   // SOCKET LISTENERS
   useEffect(() => {
       if (!socket || !drk) return;
@@ -578,7 +580,19 @@ const syncDocumentData = async () => {
                   if (b.blockId === blockId || b.id === blockId) {
 
                     if ((version || 0) < (b.version || 0)) return b;
+                    if (editingTimeouts.current[blockId]) {
+                        clearTimeout(editingTimeouts.current[blockId]);
+                    }
 
+                    // Sau 3 giây không gõ nữa thì chuyển status về 'saved' (hết màu xanh)
+                    editingTimeouts.current[blockId] = setTimeout(() => {
+                        setBlocks(prev => prev.map(b => 
+                            (b.blockId === blockId || b.id === blockId) 
+                            ? { ...b, status: 'saved' } 
+                            : b
+                        ));
+                        delete editingTimeouts.current[blockId];
+                    }, 2000);
                     return {
                       ...b,
                       content: plainText,
@@ -590,6 +604,7 @@ const syncDocumentData = async () => {
                     };
                   }
                   return b;
+                  
                 });
               }
               return blocks.map((b, i) => ({ ...b, index: i }));
@@ -807,11 +822,11 @@ const syncDocumentData = async () => {
     }
       
     clearTimeout(window.saveTimeout);
-    window.saveTimeout = setTimeout(() => {
+    window.saveTimeout = setTimeout(async () => {
         const currentBlocks = blocksRef.current;
         const blockIndex = currentBlocks.findIndex(b => b.blockId === blockId || b.id === blockId);
         const blockToSave = currentBlocks[blockIndex];
-        saveBlockToServer(blockId, content, oldHash, updatedVersion, blockToSave, blockIndex);
+        await saveBlockToServer(blockId, content, oldHash, updatedVersion, blockToSave, blockIndex);
     }, 10000);
 
     clearTimeout(window.historyTimeout);
@@ -944,7 +959,7 @@ const syncDocumentData = async () => {
     return () => clearTimeout(timer);
   }, [docTitle]);
 
-  const handleBlockBlur = (id) => {
+  const handleBlockBlur = async (id) => {
     setActiveBlockId(null);
     const el = document.getElementById(`block-${id}`);
     if (el) {
@@ -965,7 +980,7 @@ const syncDocumentData = async () => {
             const oldVersion = blockToBlur.version || 1;
             const oldHash = blockToBlur.hash || "0";
             const blockIndex = blocksRef.current.findIndex(b => b.blockId === id || b.id === id);
-            saveBlockToServer(id, currentContent, oldHash, oldVersion, blockToBlur, blockIndex);
+            await saveBlockToServer(id, currentContent, oldHash, oldVersion + 1, blockToBlur, blockIndex);
         }
     }
   };
@@ -1530,7 +1545,7 @@ const handleToggleSidebar = async () => {
               isFocused={activeBlockId === (block.blockId || block.id)}
               onFocus={() => handleBlockFocus(block.blockId || block.id)} 
               onBlur={() => handleBlockBlur(block.blockId || block.id)}
-              onChange={handleBlockChange} 
+              onChange={(_,newContent) => handleBlockChange(block.blockId, newContent)} 
               onEnter={() => handleAddBlock(index)}
               fontFamily={fontFamily} 
               formats={textFormats}
